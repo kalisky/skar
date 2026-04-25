@@ -1,0 +1,33 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Skar runtime artifacts (when implementations land)
+.skar/
+*.jsonl
+
+# Node (if/when TS substrate)
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.npm/
+
+# Python (if/when Python substrate)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Logs
+*.log

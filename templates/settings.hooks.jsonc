@@ -1,0 +1,24 @@
+// Drop into .claude/settings.json (merge with existing hooks if present).
+//
+// This wires Skar's observe mode into Claude Code: every Bash tool call
+// the agent makes is intercepted and normalized into a Receipt appended
+// to the nearest .skar/journal.jsonl ancestor.
+//
+// The hook is non-blocking: if Skar errors internally, the agent's Bash
+// call still succeeds. Hook timeout is 5 seconds.
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skar observe --from-claude-code-hook",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

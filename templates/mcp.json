@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "skar": {
+      "command": "skar",
+      "args": ["mcp"],
+      "env": {}
+    }
+  }
+}
