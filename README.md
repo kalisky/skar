@@ -50,10 +50,20 @@ If the user already has a trace in some other shape, skip step 1 and
 go straight to `generate_pytest_regression` with `trace_path` or
 `trace_json`.
 
-### Install (Claude Desktop / Claude Code / Cursor)
+### Install (Claude Code / Claude Desktop / Cursor)
 
-After `npm install -g @kalisky/skar` (or once published), add the
-following to the host's MCP config:
+**Recommended — global install, then register:**
+
+```bash
+npm install -g @kalisky/skar
+claude mcp add skar -- skar-mcp
+```
+
+That's it. Restart your MCP host (Claude Code, Claude Desktop, Cursor)
+and the four tools above will be available.
+
+If you prefer a config file over the `claude mcp add` CLI (e.g. for
+Claude Desktop, or per-project `.mcp.json` in another host):
 
 ```json
 {
@@ -65,20 +75,30 @@ following to the host's MCP config:
 }
 ```
 
-For local development (without a global install):
+**Zero-install alternative** — fetch from npm on first use, no
+global install:
 
-```json
-{
-  "mcpServers": {
-    "skar": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/skar/src/mcp/server.ts"]
-    }
-  }
-}
+```bash
+claude mcp add skar -- npx -y -p @kalisky/skar skar-mcp
 ```
 
-The server speaks stdio JSON-RPC and exposes the three tools above.
+This is slightly slower on first launch and pulls fresh on each
+machine, but skips the global install step. Use it for trying Skar
+once before committing to a global install.
+
+**Why the bin name matters.** This package ships two bins: `skar`
+(the CLI) and `skar-mcp` (the stdio MCP server). The MCP host needs
+the `skar-mcp` one — `npx @kalisky/skar` alone would launch the CLI,
+which expects shell arguments, not JSON-RPC.
+
+**For Skar contributors** working on this repo, point at the local
+source instead:
+
+```bash
+claude mcp add skar -- bun run /absolute/path/to/skar/src/mcp/server.ts
+```
+
+The server speaks stdio JSON-RPC and exposes the four tools above.
 
 ---
 
