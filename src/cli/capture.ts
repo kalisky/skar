@@ -8,6 +8,7 @@ interface CaptureClaudeCodeOptions {
   sessionPath?: string;
   lastN?: number;
   outPath?: string;
+  allowExternalPath?: boolean;
 }
 
 export async function runCaptureClaudeCode(opts: CaptureClaudeCodeOptions): Promise<void> {
@@ -15,6 +16,7 @@ export async function runCaptureClaudeCode(opts: CaptureClaudeCodeOptions): Prom
     ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
     ...(opts.sessionPath !== undefined ? { sessionPath: opts.sessionPath } : {}),
     ...(opts.lastN !== undefined ? { lastNToolCalls: opts.lastN } : {}),
+    ...(opts.allowExternalPath !== undefined ? { allowExternalPath: opts.allowExternalPath } : {}),
   });
 
   const traceJson = `${JSON.stringify(result.trace, null, 2)}\n`;

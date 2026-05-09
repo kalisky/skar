@@ -16,6 +16,7 @@ export interface CaptureOptions {
   cwd?: string;
   sessionPath?: string;
   lastNToolCalls?: number;
+  allowExternalPath?: boolean;
 }
 
 export interface CaptureResult {
@@ -31,6 +32,17 @@ export async function captureClaudeCodeSession(
   const sessionPath = options.sessionPath
     ? options.sessionPath
     : await discoverLatestSession(options.cwd ?? process.cwd());
+
+  if (options.sessionPath && !options.allowExternalPath) {
+    const projectsRoot = path.join(homedir(), ".claude", "projects");
+    const resolved = path.resolve(options.sessionPath);
+    if (resolved !== projectsRoot && !resolved.startsWith(projectsRoot + path.sep)) {
+      throw new ClaudeCodeCaptureError(
+        `session_path is outside ${projectsRoot}: ${resolved}. ` +
+          "Pass allow_external_path=true (MCP) or --allow-external-path (CLI) if this is intentional.",
+      );
+    }
+  }
 
   const events = await readSessionJsonl(sessionPath);
   const filtered = events.filter((event) => event.isSidechain !== true);

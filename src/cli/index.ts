@@ -46,6 +46,7 @@ async function handleCapture(args: string[]): Promise<void> {
     const sessionPath = readOption(rest, "--session");
     const lastNRaw = readOption(rest, "--last-n");
     const outPath = readOption(rest, "--out");
+    const allowExternalPath = rest.includes("--allow-external-path");
 
     let lastN: number | undefined;
     if (lastNRaw !== undefined) {
@@ -61,6 +62,7 @@ async function handleCapture(args: string[]): Promise<void> {
       ...(sessionPath !== undefined ? { sessionPath } : {}),
       ...(lastN !== undefined ? { lastN } : {}),
       ...(outPath !== undefined ? { outPath } : {}),
+      ...(allowExternalPath ? { allowExternalPath: true } : {}),
     });
     return;
   }
@@ -129,7 +131,7 @@ Usage:
   skar trace validate <trace.json>
   skar trace inspect <trace.json>
   skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>]
-  skar capture claude-code [--cwd <path>] [--session <path>] [--last-n <n>] [--out <path>]
+  skar capture claude-code [--cwd <path>] [--session <path>] [--last-n <n>] [--out <path>] [--allow-external-path]
 `;
 }
 

@@ -7,9 +7,21 @@ from skar_adapter import run_agent_under_test
 
 # Skar normalizes a few volatile substrings before comparing tool arguments
 # and output text, so a re-run of the agent does not fail this test for
-# unrelated reasons (a different temp directory, a fresh UUID, a new
-# timestamp). Edit this list to add or remove patterns for your project.
+# unrelated reasons (different temp dir, fresh UUID, new timestamp), and
+# so any secret that slips into a real run is collapsed to <REDACTED>
+# before comparison instead of leaking into the test failure message.
+# Edit this list to add or remove patterns for your project.
 _VOLATILE_PATTERNS = [
+    # --- Common secret shapes (kept first so they win on overlap). ---
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"), "<REDACTED>"),
+    (re.compile(r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), "<REDACTED>"),
+    (re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{20,}"), "<REDACTED>"),
+    (re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"), "<REDACTED>"),
+    (re.compile(r"sk-(?:proj-)?[A-Za-z0-9_-]{32,}"), "<REDACTED>"),
+    (re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"), "<REDACTED>"),
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "<REDACTED>"),
+    (re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"), "<REDACTED>"),
+    # --- Drift normalization. ---
     # 36-character UUIDs (session ids, request ids, run ids).
     (re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"), "<UUID>"),
     # macOS per-user temp directory.

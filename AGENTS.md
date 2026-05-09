@@ -155,6 +155,31 @@ def run_agent_under_test(*, prompt, mocked_tool_calls):
 
 If the user does not have this shim yet, mention it and offer a stub.
 
+## Security: what to warn the user about
+
+Before invoking `generate_pytest_regression`, especially after a
+`capture_claude_code_session` call that pulled in real tool calls
+from the user's session, **briefly check the captured trace for
+likely secrets** (API keys, bearer tokens, AWS access keys, JWTs,
+private keys, internal URLs that look like credentials). If you see
+any, tell the user before generating the test — the generated file
+will contain those values verbatim and will likely be committed to
+their repo.
+
+Patterns worth flagging if present in tool arguments or results:
+
+- `sk-...` (OpenAI / Anthropic API keys)
+- `ghp_...`, `gho_...`, `ghs_...` (GitHub tokens)
+- `AKIA...` (AWS access key id)
+- `xox[bapr]-...` (Slack tokens)
+- `eyJ...eyJ...` (JWT shape)
+- `Bearer <long-string>` in a header
+- `-----BEGIN ... PRIVATE KEY-----` blocks
+
+If `session_path` points anywhere outside `~/.claude/projects/`, that
+is unusual — surface it to the user before reading. The same goes
+for `output_path` outside the user's project directory.
+
 ## Repo orientation
 
 - `src/cli/` — CLI entrypoints (`skar trace validate|inspect`,

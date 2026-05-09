@@ -113,8 +113,11 @@ def run_agent_under_test(*, prompt, mocked_tool_calls):
 ```
 
 The contract is intentionally small: `tool_calls`, `status`, optional
-`output_text`. Skar does not own runtime execution; you wire the adapter
-to your agent however you want.
+`output_text`. **The adapter is meant to mock the agent and replay the
+captured tool calls, not to actually invoke your live agent.** A naive
+implementation that re-calls real tools or services would re-execute
+side-effects (Bash commands, DB writes, API calls) every time `pytest`
+runs. Treat regression tests as offline replays.
 
 ---
 
@@ -154,6 +157,40 @@ You can edit the file freely — it's just Python, no DSL, no magic.
 number, boolean, null). Order of `events` is preserved.
 
 ---
+
+## Security & sensitive data
+
+Skar makes no network calls, runs no shells, and emits plain Python
+that does not use `eval` or `exec`. That said, four things are worth
+knowing:
+
+**1. Generated tests contain the trace verbatim.** Every captured tool
+call's arguments and result, plus the prompt, ends up in the `TRACE
+= {...}` block. If a captured session involved API keys, internal
+URLs, customer records, or other secrets, those values land in the
+file you commit. **Review every generated test before committing.**
+
+**2. Skar trace files are an injection vector.** Inspecting or
+generating from a trace puts its contents into your agent's context.
+Don't run Skar on traces from untrusted sources (forums, public
+artifacts, etc.) — an attacker who controls the trace controls part
+of the prompt.
+
+**3. The adapter must mock, not invoke.** `run_agent_under_test()` is
+intended to replay captured tool calls against in-memory mocks. A
+naive implementation that calls real Bash, hits real APIs, or writes
+to real databases turns every `pytest` run into a real-world side
+effect.
+
+**4. MCP path inputs run with your permissions.** `session_path`,
+`output_path`, and `trace_path` accept arbitrary paths. The MCP host
+(Claude Desktop, Code, Cursor) is responsible for gating file
+operations behind user approval; Skar inherits whatever filesystem
+access you grant. Treat unfamiliar Skar tool calls the same way you
+treat any agent file-write request.
+
+If you find a security issue, please open a private issue or email
+the repository owner before disclosing publicly.
 
 ## Why Skar exists
 

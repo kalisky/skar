@@ -15,7 +15,7 @@ import { parseTrace, parseTraceFile, TraceParseError } from "../trace/parser.js"
 import { type Trace } from "../trace/schema.js";
 
 const SERVER_NAME = "skar";
-const SERVER_VERSION = "0.1.0";
+const SERVER_VERSION = "0.1.1";
 
 const traceSourceShape = {
   trace_path: z
@@ -77,13 +77,20 @@ export function createSkarServer(): McpServer {
           .describe(
             "Optional path to write the captured trace JSON. If omitted, the trace is only returned inline in the response.",
           ),
+        allow_external_path: z
+          .boolean()
+          .optional()
+          .describe(
+            "Allow session_path outside ~/.claude/projects/. Defaults to false to prevent accidental reads of arbitrary files. Set to true only when the user has explicitly asked you to read a session file from another location.",
+          ),
       },
     },
-    async ({ cwd, session_path, last_n_tool_calls, output_path }) => {
+    async ({ cwd, session_path, last_n_tool_calls, output_path, allow_external_path }) => {
       const result = await captureClaudeCodeSession({
         ...(cwd !== undefined ? { cwd } : {}),
         ...(session_path !== undefined ? { sessionPath: session_path } : {}),
         ...(last_n_tool_calls !== undefined ? { lastNToolCalls: last_n_tool_calls } : {}),
+        ...(allow_external_path !== undefined ? { allowExternalPath: allow_external_path } : {}),
       });
 
       const traceJson = JSON.stringify(result.trace, null, 2);
@@ -124,6 +131,7 @@ export function createSkarServer(): McpServer {
         "TRIGGER PHRASES: 'turn this trace into a test', 'generate a regression test for that bad run', 'make sure this never happens again', 'pin this failure', 'capture this as a test'.",
         "INPUT: a captured agent trace conforming to the Skar trace schema (schema_version 0.1) — provide either a file path (trace_path) or the raw JSON string (trace_json). Also accepts an optional output_path to write the file, and an optional test_name.",
         "OUTPUT: ready-to-commit pytest source code that asserts on the captured tool sequence, tool arguments, and final status. The user wires a tiny `skar_adapter.run_agent_under_test` shim once; everything else is generated.",
+        "SECURITY NOTE: Skar auto-redacts common secret shapes (API keys: sk-ant-, sk-, ghp_, AKIA, xox*; JWTs; Bearer tokens; PEM private key blocks) before rendering the trace into the test file. If you spot OTHER sensitive content the user might not want committed (internal hostnames, customer names, account numbers, internal URLs, employee names), warn the user before generating — the rest of the trace lands in the file verbatim and will likely be checked into git.",
         "DO NOT USE FOR: live trace capture, generic eval scoring, observability dashboards, or non-tool-using LLM completions. Skar's scope is narrow on purpose: trace -> committed regression test.",
       ].join(" "),
       inputSchema: {

@@ -1,10 +1,74 @@
 import { type JsonValue } from "../trace/schema.js";
 import { type NormalizedTrace } from "../trace/normalizer.js";
 
+const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  // PEM private key blocks first — they span multiple lines and we want
+  // the whole block redacted before any sub-pattern bites a piece.
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "<REDACTED>"],
+  // JSON Web Tokens: three base64url segments separated by dots.
+  [/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "<REDACTED>"],
+  // Bearer tokens in Authorization-header shape.
+  [/Bearer\s+[A-Za-z0-9._~+/=-]{20,}/g, "<REDACTED>"],
+  // Anthropic API keys — match before the generic sk- rule.
+  [/sk-ant-[A-Za-z0-9_-]{20,}/g, "<REDACTED>"],
+  // OpenAI API keys (incl. project-scoped).
+  [/sk-(?:proj-)?[A-Za-z0-9_-]{32,}/g, "<REDACTED>"],
+  // GitHub personal access / OAuth / server / refresh tokens.
+  [/gh[pousr]_[A-Za-z0-9]{20,}/g, "<REDACTED>"],
+  // AWS access key id.
+  [/AKIA[0-9A-Z]{16}/g, "<REDACTED>"],
+  // Slack tokens.
+  [/xox[baprs]-[A-Za-z0-9-]{10,}/g, "<REDACTED>"],
+];
+
+function redactSecretsInString(input: string): string {
+  let out = input;
+  for (const [pattern, replacement] of SECRET_PATTERNS) {
+    out = out.replace(pattern, replacement);
+  }
+  return out;
+}
+
+function redactSecrets(value: JsonValue): JsonValue {
+  if (typeof value === "string") {
+    return redactSecretsInString(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(redactSecrets);
+  }
+  if (value !== null && typeof value === "object") {
+    const result: { [key: string]: JsonValue } = {};
+    for (const [key, child] of Object.entries(value)) {
+      result[key] = redactSecrets(child);
+    }
+    return result;
+  }
+  return value;
+}
+
+function redactTrace(trace: NormalizedTrace): NormalizedTrace {
+  return {
+    schemaVersion: trace.schemaVersion,
+    prompt: redactSecretsInString(trace.prompt),
+    toolCalls: trace.toolCalls.map((call) => ({
+      toolName: call.toolName,
+      arguments: redactSecrets(call.arguments),
+      result: redactSecrets(call.result),
+    })),
+    final: {
+      status: trace.final.status,
+      ...(trace.final.output_text
+        ? { output_text: redactSecretsInString(trace.final.output_text) }
+        : {}),
+    },
+  };
+}
+
 export function generatePytestCase(trace: NormalizedTrace, testName?: string): string {
-  const resolvedTestName = sanitizeTestName(testName ?? defaultTestName(trace.prompt));
-  const toolSequence = trace.toolCalls.map((event) => event.toolName);
-  const renderedTrace = renderPython(trace);
+  const safeTrace = redactTrace(trace);
+  const resolvedTestName = sanitizeTestName(testName ?? defaultTestName(safeTrace.prompt));
+  const toolSequence = safeTrace.toolCalls.map((event) => event.toolName);
+  const renderedTrace = renderPython(safeTrace);
   const renderedToolSequence = indentMultiline(renderPython(toolSequence), 4);
 
   return `from __future__ import annotations
@@ -16,9 +80,21 @@ from skar_adapter import run_agent_under_test
 
 # Skar normalizes a few volatile substrings before comparing tool arguments
 # and output text, so a re-run of the agent does not fail this test for
-# unrelated reasons (a different temp directory, a fresh UUID, a new
-# timestamp). Edit this list to add or remove patterns for your project.
+# unrelated reasons (different temp dir, fresh UUID, new timestamp), and
+# so any secret that slips into a real run is collapsed to <REDACTED>
+# before comparison instead of leaking into the test failure message.
+# Edit this list to add or remove patterns for your project.
 _VOLATILE_PATTERNS = [
+    # --- Common secret shapes (kept first so they win on overlap). ---
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----"), "<REDACTED>"),
+    (re.compile(r"eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"), "<REDACTED>"),
+    (re.compile(r"Bearer\\s+[A-Za-z0-9._~+/=-]{20,}"), "<REDACTED>"),
+    (re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"), "<REDACTED>"),
+    (re.compile(r"sk-(?:proj-)?[A-Za-z0-9_-]{32,}"), "<REDACTED>"),
+    (re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"), "<REDACTED>"),
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "<REDACTED>"),
+    (re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"), "<REDACTED>"),
+    # --- Drift normalization. ---
     # 36-character UUIDs (session ids, request ids, run ids).
     (re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"), "<UUID>"),
     # macOS per-user temp directory.
@@ -71,8 +147,8 @@ def test_${resolvedTestName}():
     expected_args = [_normalize(call["arguments"]) for call in TRACE["toolCalls"]]
     assert observed_args == expected_args
 
-    assert result["status"] == ${renderPython(trace.final.status)}
-${renderOutputAssertion(trace)}
+    assert result["status"] == ${renderPython(safeTrace.final.status)}
+${renderOutputAssertion(safeTrace)}
 `.trimEnd() + "\n";
 }
 
