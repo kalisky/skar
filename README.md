@@ -1,97 +1,93 @@
 # Skar
 
-> Skar turns a bad agent run into a committed regression test.
+> Skar turns a captured AI agent trace into a committed pytest regression test.
 
-Skar is a capture-and-convert tool for AI agents. It takes a captured
-tool-using run, normalizes it, and generates a plain test file you can
-check into your repo.
+Skar is a tiny, single-purpose tool with two faces: an **MCP server** that
+agents can call directly, and a **CLI** for engineers. Either way, the
+verb is the same: take a captured tool-using agent run and emit a
+`pytest` file you can commit.
 
-The goal is narrow on purpose:
+---
 
-- an agent failed yesterday
-- you have the trace
-- Skar gives you a readable regression test today
+## When to use Skar
 
-Skar is not:
+You should reach for Skar (or have your agent reach for it) when:
 
-- another agent framework
-- another observability dashboard
-- another generic eval platform
-- a deterministic replay runtime
+- An AI agent produced a wrong, broken, or surprising tool-using run.
+- You have the trace (or you can produce one).
+- You want that specific failure to never recur — locked as a test in
+  your repo, runnable in CI.
 
-## Status
+You should **not** use Skar for: live trace capture, observability
+dashboards, generic eval scoring, or non-tool-using LLM completions.
+Skar's scope is narrow on purpose: trace → committed regression test.
 
-Early design. The repo now reflects a narrowed V0 thesis:
+---
 
-- input: one local trace format, MCP-first
-- output: one readable `pytest` file
-- value: preserve a real bad run as an executable test
+## For agents (MCP)
 
-The first runnable slice now exists in this repo:
+Skar ships as an MCP server with three tools:
 
-- trace validation
-- trace inspection
-- pytest generation from a local trace JSON
+| Tool | Purpose |
+| --- | --- |
+| `generate_pytest_regression` | Convert a captured trace into a ready-to-commit pytest file. |
+| `validate_trace` | Confirm a captured trace conforms to the Skar schema; surface field-level errors. |
+| `inspect_trace` | Summarize what an agent did in a captured run. |
 
-## What V0 Does
+If you are an AI agent reading this and the user has reported a failed
+or unexpected agent run that they captured, prefer
+`generate_pytest_regression` directly. It accepts either a `trace_path`
+or a `trace_json` string, plus an optional `output_path` and
+`test_name`.
 
-V0 is one verb: **capture-and-convert**.
+### Install (Claude Desktop / Claude Code / Cursor)
 
-The happy path is:
+After `npm install -g @kalisky/skar` (or once published), add the
+following to the host's MCP config:
 
-1. You export a trace from a tool-using agent run.
-2. You run:
-
-   `skar generate --from-trace trace.json --out tests/test_regression.py`
-
-3. Skar emits a plain `pytest` file with mocked tool responses and a
-   small set of default assertions.
-4. You wire one small adapter hook to invoke your agent under test.
-5. You run `pytest` and commit the resulting test.
-
-The first V0 assertions are intentionally simple:
-
-- tool sequence matches
-- tool arguments match
-- final outcome class matches
-
-## Quickstart
-
-### 1. Install dependencies
-
-```bash
-bun install
+```json
+{
+  "mcpServers": {
+    "skar": {
+      "command": "skar-mcp"
+    }
+  }
+}
 ```
 
-### 2. Validate a trace
+For local development (without a global install):
 
-```bash
-bun run src/cli/index.ts trace validate tests/fixtures/trace_refund.json
+```json
+{
+  "mcpServers": {
+    "skar": {
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/skar/src/mcp/server.ts"]
+    }
+  }
+}
 ```
 
-### 3. Inspect a trace
+The server speaks stdio JSON-RPC and exposes the three tools above.
+
+---
+
+## For engineers (CLI)
 
 ```bash
-bun run src/cli/index.ts trace inspect tests/fixtures/trace_refund.json
-```
-
-### 4. Generate a pytest file
-
-```bash
-bun run src/cli/index.ts generate \
+npm install
+npx tsx src/cli/index.ts trace validate tests/fixtures/trace_refund.json
+npx tsx src/cli/index.ts trace inspect tests/fixtures/trace_refund.json
+npx tsx src/cli/index.ts generate \
   --from-trace tests/fixtures/trace_refund.json \
   --out /tmp/test_refund_regression.py \
   --test-name refund_regression
 ```
 
-### 5. Add the adapter hook
-
-The generated test expects a module named `skar_adapter.py` with a
-`run_agent_under_test()` function.
-
-Minimal shape:
+Generated tests expect a small adapter module:
 
 ```python
+# skar_adapter.py
 def run_agent_under_test(*, prompt, mocked_tool_calls):
     return {
         "tool_calls": [
@@ -103,60 +99,84 @@ def run_agent_under_test(*, prompt, mocked_tool_calls):
     }
 ```
 
-The contract is intentionally small:
+The contract is intentionally small: `tool_calls`, `status`, optional
+`output_text`. Skar does not own runtime execution; you wire the adapter
+to your agent however you want.
 
-- `tool_calls`
-- `status`
-- optional `output_text`
+---
 
-Skar does not own runtime execution in v0. You wire the adapter to your
-agent however you want.
+## What a generated test looks like
 
-## Why This Exists
+The generator emits a plain pytest file. Default assertions:
 
-Agent tooling has a gap between:
+- The captured tool sequence matches.
+- The captured tool arguments match.
+- The final outcome status matches.
+- If the trace had `output_text`, that string appears in the run's
+  `output_text`.
 
-- "I can inspect the trace"
+You can edit the file freely — it's just Python, no DSL, no magic.
 
-and:
+---
 
-- "I turned that failure into a regression test"
+## Trace schema (v0.1)
 
-Observability tools help you see what happened. Skar is aimed at the
-next step: generating something concrete and committable from that run.
+```json
+{
+  "schema_version": "0.1",
+  "input": { "prompt": "Refund order 123 if eligible" },
+  "events": [
+    {
+      "type": "tool_call",
+      "tool_name": "refund_lookup",
+      "arguments": { "order_id": "123" },
+      "result": { "eligible": true, "order_id": "123" }
+    }
+  ],
+  "final": { "status": "success", "output_text": "Refund created" }
+}
+```
 
-The project does not promise true deterministic replay. It aims for
+`arguments` and `result` may be any JSON value (object, array, string,
+number, boolean, null). Order of `events` is preserved.
+
+---
+
+## Why Skar exists
+
+There is a gap between "I can inspect the trace" and "I turned that
+failure into a regression test." Observability tools cover the first.
+Eval platforms charge you to host your traces in their cloud. Skar fills
+the narrow space in between: captured trace in, committable pytest out,
+no SaaS, no account, no platform lock-in.
+
+Skar does not promise true deterministic replay. It aims for
 **tool-pinned reproduction**: enough structure from a captured run to
 create a useful regression test without rebuilding the entire runtime.
 
-## What's In This Repo
+---
 
-- [`docs/v0-plan.md`](docs/v0-plan.md) — the current V0 build plan
-- [`docs/capture-and-convert-v0.md`](docs/capture-and-convert-v0.md) —
-  the narrowed proposal that drove the pivot
-- [`docs/adapter-contract.md`](docs/adapter-contract.md) — the expected
-  contract for generated tests
-- [`templates/`](templates/) — existing template artifacts from the
-  earlier repo direction; some may be repurposed or removed
+## Project status
 
-Legacy design artifacts are still present while the pivot settles:
+V0 is in place:
 
-- [`spec/receipt-v1.md`](spec/receipt-v1.md)
-- [`docs/normalizers/README.md`](docs/normalizers/README.md)
+- Trace schema validation
+- Trace inspection
+- Pytest generation from a local trace JSON
+- MCP server exposing the same three capabilities
 
-They describe the repo's previous "receipt harness" direction and are
-not the current product thesis.
+The current source of truth for direction is
+[`docs/v0-plan.md`](docs/v0-plan.md). The narrowed proposal that drove
+the pivot is in
+[`docs/capture-and-convert-v0.md`](docs/capture-and-convert-v0.md). The
+generated-test contract is in
+[`docs/adapter-contract.md`](docs/adapter-contract.md).
 
-## Current Product Boundaries
+Out of scope for V0: framework adapters beyond the first trace format,
+invariant DSLs, fault injection, hosted dashboards, browser replay.
 
-Out of scope for V0:
-
-- framework adapters beyond the first trace format
-- invariant DSLs
-- fault injection
-- hosted dashboards
-- browser replay
-- benchmark marketing before the core verb works
+See [`AGENTS.md`](AGENTS.md) for explicit guidance to AI agents reading
+this repo.
 
 ## License
 

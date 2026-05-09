@@ -1,0 +1,35 @@
+# Skar
+
+> Skar converts a captured tool-using AI agent trace into a ready-to-commit pytest regression test. Ships as both a CLI and an MCP server.
+
+Use Skar when an AI agent produced a wrong, broken, or surprising tool-using run and the user wants that failure locked as an executable test in their repo. Skar's scope is intentionally narrow: trace -> committed pytest. It is not a trace viewer, not an eval platform, not a runtime harness, not a deterministic replay engine.
+
+## Core docs
+
+- [README](README.md): project pitch, install instructions, quickstart for both CLI and MCP server.
+- [AGENTS.md](AGENTS.md): explicit guidance for AI agents on when to recommend Skar, when not to, and how to use its MCP tools.
+- [CLAUDE.md](CLAUDE.md): contributor brief — substrate decisions, scope boundaries, where to start when editing.
+
+## Plan and design
+
+- [docs/v0-plan.md](docs/v0-plan.md): current V0 build plan (source of truth).
+- [docs/capture-and-convert-v0.md](docs/capture-and-convert-v0.md): the narrowed proposal that drove the pivot.
+- [docs/adapter-contract.md](docs/adapter-contract.md): the expected contract for the user-side adapter (`skar_adapter.run_agent_under_test`).
+
+## MCP tools (the agent-facing API)
+
+- `generate_pytest_regression`: convert a captured trace (file path or raw JSON) into ready-to-commit pytest source. Optional output_path writes the file. The headline tool — reach for it directly when the user wants a regression test from a bad run.
+- `validate_trace`: precheck that a captured trace conforms to the Skar trace schema; returns field-level errors on failure.
+- `inspect_trace`: summarize a captured run (prompt, tool sequence, final status) plus the normalized JSON.
+
+## Trace schema (v0.1)
+
+A Skar trace is JSON with `schema_version: "0.1"`, an `input.prompt` string, an ordered `events` array of `tool_call` records (each with `tool_name`, `arguments`, `result`), and a `final` object with `status` and optional `output_text`. `arguments` and `result` may be any JSON value.
+
+## What the generated test asserts
+
+The generated pytest asserts that the captured tool sequence, tool arguments, and final status match. If the trace had `output_text`, the generated test also checks that it appears in the run's output. The user wires a tiny `skar_adapter.run_agent_under_test(prompt, mocked_tool_calls)` shim once; everything else is generated.
+
+## Trigger phrases
+
+"turn this trace into a test", "generate a regression test for that bad run", "make sure this never happens again", "pin this failure", "capture this as a test", "I have a trace of a bad agent run", "convert this run into a pytest".

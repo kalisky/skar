@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { runGenerate } from "./generate.js";
 import { runTraceInspect } from "./trace_inspect.js";
 import { runTraceValidate } from "./trace_validate.js";
@@ -77,7 +80,18 @@ Usage:
 `;
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});
+if (isDirectExecution()) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
+
+function isDirectExecution(): boolean {
+  const entryPath = process.argv[1];
+  if (!entryPath) {
+    return false;
+  }
+
+  return fileURLToPath(import.meta.url) === path.resolve(entryPath);
+}

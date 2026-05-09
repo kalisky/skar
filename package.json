@@ -2,20 +2,45 @@
   "name": "@kalisky/skar",
   "version": "0.0.1",
   "private": true,
-  "description": "Capture a tool-using agent run and convert it into a regression test.",
+  "description": "Skar turns a captured AI agent trace into a committed pytest regression test. MCP server + CLI. Use when a tool-using agent run fails and you want to lock the failure as an executable test.",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "agent",
+    "agents",
+    "ai-agents",
+    "agent-testing",
+    "agent-evals",
+    "regression-test",
+    "regression-testing",
+    "pytest",
+    "pytest-generator",
+    "trace",
+    "trace-to-test",
+    "tool-use",
+    "anthropic",
+    "claude",
+    "claude-code",
+    "cursor",
+    "llm-testing"
+  ],
   "type": "module",
   "bin": {
-    "skar": "./dist/cli/index.js"
+    "skar": "./dist/cli/index.js",
+    "skar-mcp": "./dist/mcp/server.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "tsx --test tests/**/*.test.ts",
+    "mcp": "tsx src/mcp/server.ts"
   },
   "engines": {
     "node": ">=22.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
     "zod": "^3.24.4"
   },
   "devDependencies": {

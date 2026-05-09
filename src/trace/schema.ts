@@ -14,7 +14,7 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 const toolCallEventSchema = z.object({
   type: z.literal("tool_call"),
   tool_name: z.string().min(1),
-  arguments: z.record(jsonValueSchema),
+  arguments: jsonValueSchema,
   result: jsonValueSchema,
 });
 

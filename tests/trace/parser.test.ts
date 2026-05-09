@@ -15,6 +15,13 @@ test("parseTraceFile loads a valid trace fixture", async () => {
   assert.equal(trace.final.status, "success");
 });
 
+test("parseTraceFile accepts scalar tool arguments", async () => {
+  const trace = await parseTraceFile(path.join(fixturesDir, "trace_scalar_arguments.json"));
+
+  assert.equal(trace.events.length, 1);
+  assert.equal(trace.events[0]?.arguments, "build-42");
+});
+
 test("parseTrace emits readable validation errors", async () => {
   const raw = await readFile(path.join(fixturesDir, "trace_minimal.json"), "utf8");
   const parsed = JSON.parse(raw) as Record<string, unknown>;

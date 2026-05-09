@@ -18,8 +18,13 @@ agents. The current direction is narrower and simpler:
 - output: a readable generated test file
 - value: convert a real failure into a check-in-ready regression test
 
-Implementation has not started yet. The current source of truth is
-`docs/v0-plan.md`.
+The first runnable v0 slice now exists:
+
+- trace schema validation
+- trace inspection
+- pytest generation from a local trace JSON
+
+The current source of truth is still `docs/v0-plan.md`.
 
 ## Product Boundaries
 
@@ -53,7 +58,8 @@ Short version:
 - the implementation should stay boring
 
 When implementation starts, scaffold from the repo root with `bun init`.
-No `package.json` exists yet on purpose.
+The Bun project has already been scaffolded and the CLI lives in
+`src/cli/`.
 
 ## Repo Layout
 
@@ -69,7 +75,10 @@ spec/
   receipt-v1.md                   # legacy artifact from prior direction
 templates/                        # legacy templates, pending cleanup or reuse
 src/                              # to be created with implementation
-tests/                            # to be created with implementation
+  cli/                            # CLI entrypoints
+  generator/                      # pytest generation
+  trace/                          # schema, parser, normalizer
+tests/                            # fixtures + unit tests
 ```
 
 Some legacy files remain because they may still contain reusable ideas,
@@ -86,7 +95,8 @@ but they are not the current product definition.
 
 ## Where To Start
 
-Read `docs/v0-plan.md` first.
+Read `docs/v0-plan.md` first, then inspect `src/` and `tests/` for the
+current slice.
 
 The first real milestone is deliberately small:
 
@@ -94,8 +104,9 @@ The first real milestone is deliberately small:
 - validate and normalize it
 - generate one `pytest` file from one sample trace
 
-Do not start with adapters, benchmarking, or trace ingestion from every
-framework.
+That milestone is now in place. The next work should keep tightening the
+capture-to-test path rather than broadening scope into adapters,
+benchmarking, or importer sprawl.
 
 ## Things Not To Relitigate Without An Explicit Prompt
 

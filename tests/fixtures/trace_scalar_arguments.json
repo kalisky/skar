@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1",
+  "input": {
+    "prompt": "Summarize the latest build"
+  },
+  "events": [
+    {
+      "type": "tool_call",
+      "tool_name": "build_summary",
+      "arguments": "build-42",
+      "result": {
+        "summary": "Build passed"
+      }
+    }
+  ],
+  "final": {
+    "status": "success"
+  }
+}
