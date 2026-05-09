@@ -16,7 +16,7 @@ import { parseTrace, parseTraceFile, TraceParseError } from "../trace/parser.js"
 import { type Trace } from "../trace/schema.js";
 
 const SERVER_NAME = "skar";
-const SERVER_VERSION = "0.1.1";
+const SERVER_VERSION = "0.2.0";
 
 const traceSourceShape = {
   trace_path: z

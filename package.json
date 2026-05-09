@@ -1,6 +1,6 @@
 {
   "name": "@kalisky/skar",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Skar turns a captured AI agent trace into a committed pytest regression test. MCP server + CLI. Use when a tool-using agent run fails and you want to lock the failure as an executable test.",
   "keywords": [
     "mcp",
