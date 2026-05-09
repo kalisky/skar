@@ -1,0 +1,26 @@
+{
+  "name": "@kalisky/skar",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Capture a tool-using agent run and convert it into a regression test.",
+  "type": "module",
+  "bin": {
+    "skar": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test tests/**/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

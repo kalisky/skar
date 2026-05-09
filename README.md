@@ -27,7 +27,11 @@ Early design. The repo now reflects a narrowed V0 thesis:
 - output: one readable `pytest` file
 - value: preserve a real bad run as an executable test
 
-Implementation has not yet begun.
+The first runnable slice now exists in this repo:
+
+- trace validation
+- trace inspection
+- pytest generation from a local trace JSON
 
 ## What V0 Does
 
@@ -51,6 +55,63 @@ The first V0 assertions are intentionally simple:
 - tool arguments match
 - final outcome class matches
 
+## Quickstart
+
+### 1. Install dependencies
+
+```bash
+bun install
+```
+
+### 2. Validate a trace
+
+```bash
+bun run src/cli/index.ts trace validate tests/fixtures/trace_refund.json
+```
+
+### 3. Inspect a trace
+
+```bash
+bun run src/cli/index.ts trace inspect tests/fixtures/trace_refund.json
+```
+
+### 4. Generate a pytest file
+
+```bash
+bun run src/cli/index.ts generate \
+  --from-trace tests/fixtures/trace_refund.json \
+  --out /tmp/test_refund_regression.py \
+  --test-name refund_regression
+```
+
+### 5. Add the adapter hook
+
+The generated test expects a module named `skar_adapter.py` with a
+`run_agent_under_test()` function.
+
+Minimal shape:
+
+```python
+def run_agent_under_test(*, prompt, mocked_tool_calls):
+    return {
+        "tool_calls": [
+            {"tool_name": "refund_lookup", "arguments": {"order_id": "123"}},
+            {"tool_name": "refund_create", "arguments": {"order_id": "123"}},
+        ],
+        "status": "success",
+        "output_text": "Refund created",
+    }
+```
+
+The contract is intentionally small:
+
+- `tool_calls`
+- `status`
+- optional `output_text`
+
+Skar does not own runtime execution in v0. You wire the adapter to your
+agent however you want.
+
 ## Why This Exists
 
 Agent tooling has a gap between:
@@ -73,6 +134,8 @@ create a useful regression test without rebuilding the entire runtime.
 - [`docs/v0-plan.md`](docs/v0-plan.md) — the current V0 build plan
 - [`docs/capture-and-convert-v0.md`](docs/capture-and-convert-v0.md) —
   the narrowed proposal that drove the pivot
+- [`docs/adapter-contract.md`](docs/adapter-contract.md) — the expected
+  contract for generated tests
 - [`templates/`](templates/) — existing template artifacts from the
   earlier repo direction; some may be repurposed or removed
 

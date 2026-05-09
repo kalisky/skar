@@ -1,0 +1,21 @@
+{
+  "schema_version": "0.1",
+  "input": {
+    "prompt": "Check weather"
+  },
+  "events": [
+    {
+      "type": "tool_call",
+      "tool_name": "weather_lookup",
+      "arguments": {
+        "city": "Tel Aviv"
+      },
+      "result": {
+        "condition": "sunny"
+      }
+    }
+  ],
+  "final": {
+    "status": "success"
+  }
+}
