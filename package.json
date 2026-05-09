@@ -36,8 +36,8 @@
   },
   "type": "module",
   "bin": {
-    "skar": "./dist/cli/index.js",
-    "skar-mcp": "./dist/mcp/server.js"
+    "skar": "dist/cli/index.js",
+    "skar-mcp": "dist/mcp/server.js"
   },
   "files": [
     "dist",
