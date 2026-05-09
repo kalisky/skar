@@ -70,6 +70,12 @@ Inputs (all optional):
   `~/.claude/projects/`. Overrides cwd-based discovery.
 - `last_n_tool_calls` — slice the most recent N tool calls. Useful
   when only the tail of a long session is the bad run.
+- `from_tool_call_index` / `to_tool_call_index` — 0-based inclusive
+  start and exclusive end for a precise range. Mutually exclusive with
+  `last_n_tool_calls`. Use this when the user can describe exactly
+  which tool calls matter ("from the bash that grepped the logs to the
+  one that wrote the file") — pick the matching indexes by inspecting
+  the session yourself first.
 - `output_path` — write the trace JSON to disk; otherwise it is only
   returned inline.
 
@@ -93,8 +99,24 @@ Use this for the main happy path. Inputs:
 - `test_name` (string, optional) — a short suffix used for the pytest
   function name. The generator emits `def test_<test_name>():`. If
   omitted, a name is derived from the trace prompt.
+- `extra_redact_patterns` (string[], optional) — project-specific regex
+  shapes to also redact (in addition to the built-in API-key / JWT /
+  token shapes). Each match is replaced with `<REDACTED>` in both the
+  TRACE block and the runtime `_VOLATILE_PATTERNS` list. Use this when
+  you spot internal token formats, customer-id shapes, or hostnames the
+  defaults miss.
+- `note` (string, optional) — free-text rendered as a comment block at
+  the top of the generated test. Use this to record what was wrong
+  about the run, why the test exists, or links to a ticket — context
+  the future maintainer needs that isn't visible in the captured tool
+  calls.
+- `report_path` (string, optional) — write a static HTML summary report
+  alongside the test file. Useful before committing or attaching to a
+  PR — surfaces captured slice, redaction counts, drift-tolerance
+  summary, and plain-English assertions in one glanceable page.
 
-Returns: a short status message plus the generated pytest source.
+Returns: a short status message (including redaction counts) plus the
+generated pytest source.
 
 ### `validate_trace`
 

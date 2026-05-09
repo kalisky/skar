@@ -2,8 +2,14 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import {
+  DEFAULT_REDACTION_RULES,
+  redactJsonWithCounts,
+  redactStringWithCounts,
+  type RedactionCounts,
+} from "../redact/secrets.js";
 import { parseTrace } from "../trace/parser.js";
-import { type Trace } from "../trace/schema.js";
+import { type JsonValue, type Trace } from "../trace/schema.js";
 
 export class ClaudeCodeCaptureError extends Error {
   constructor(message: string) {
@@ -16,6 +22,8 @@ export interface CaptureOptions {
   cwd?: string;
   sessionPath?: string;
   lastNToolCalls?: number;
+  fromToolCallIndex?: number;
+  toToolCallIndex?: number;
   allowExternalPath?: boolean;
 }
 
@@ -24,6 +32,7 @@ export interface CaptureResult {
   sessionPath: string;
   toolCallCount: number;
   totalToolCalls: number;
+  redactionCounts: RedactionCounts;
 }
 
 export async function captureClaudeCodeSession(
@@ -58,25 +67,29 @@ export async function captureClaudeCodeSession(
 
   const ordered = Array.from(toolUses.values()).sort((a, b) => a.order - b.order);
   const total = ordered.length;
-  const sliced =
-    options.lastNToolCalls !== undefined && options.lastNToolCalls > 0
-      ? ordered.slice(-options.lastNToolCalls)
-      : ordered;
+  const sliced = sliceTools(ordered, options);
+
+  const counts: RedactionCounts = {};
 
   const traceEvents = sliced.map((entry) => ({
     type: "tool_call" as const,
     tool_name: entry.name,
-    arguments: jsonOrNull(entry.input),
-    result: jsonOrNull(toolResults.get(entry.id) ?? null),
+    arguments: redactJsonInline(jsonOrNull(entry.input), counts),
+    result: redactJsonInline(jsonOrNull(toolResults.get(entry.id) ?? null), counts),
   }));
+
+  const redactedPrompt = redactStringWithCounts(prompt, DEFAULT_REDACTION_RULES, counts);
+  const redactedOutputText = lastAssistantText
+    ? redactStringWithCounts(lastAssistantText, DEFAULT_REDACTION_RULES, counts)
+    : undefined;
 
   const candidate = {
     schema_version: "0.1" as const,
-    input: { prompt },
+    input: { prompt: redactedPrompt },
     events: traceEvents,
     final: {
       status: "unknown",
-      ...(lastAssistantText ? { output_text: lastAssistantText } : {}),
+      ...(redactedOutputText ? { output_text: redactedOutputText } : {}),
     },
   };
 
@@ -87,6 +100,7 @@ export async function captureClaudeCodeSession(
     sessionPath,
     toolCallCount: traceEvents.length,
     totalToolCalls: total,
+    redactionCounts: counts,
   };
 }
 
@@ -210,9 +224,50 @@ function collectToolEvents(events: SessionEvent[]): {
   return { toolUses, toolResults, lastAssistantText };
 }
 
-function jsonOrNull(value: unknown): unknown {
+function jsonOrNull(value: unknown): JsonValue {
   if (value === undefined) return null;
-  return JSON.parse(JSON.stringify(value));
+  return JSON.parse(JSON.stringify(value)) as JsonValue;
+}
+
+function redactJsonInline(value: JsonValue, counts: RedactionCounts): JsonValue {
+  const { value: redacted, counts: nested } = redactJsonWithCounts(value, DEFAULT_REDACTION_RULES);
+  for (const [k, v] of Object.entries(nested)) {
+    counts[k] = (counts[k] ?? 0) + v;
+  }
+  return redacted;
+}
+
+function sliceTools(ordered: ToolUseEntry[], options: CaptureOptions): ToolUseEntry[] {
+  const usingRange =
+    options.fromToolCallIndex !== undefined || options.toToolCallIndex !== undefined;
+  const usingLastN = options.lastNToolCalls !== undefined;
+
+  if (usingRange && usingLastN) {
+    throw new ClaudeCodeCaptureError(
+      "Pass either last_n_tool_calls or from_tool_call_index/to_tool_call_index, not both.",
+    );
+  }
+
+  if (usingLastN) {
+    const n = options.lastNToolCalls!;
+    if (n <= 0) {
+      throw new ClaudeCodeCaptureError("last_n_tool_calls must be a positive integer.");
+    }
+    return ordered.slice(-n);
+  }
+
+  if (usingRange) {
+    const start = options.fromToolCallIndex ?? 0;
+    const end = options.toToolCallIndex ?? ordered.length;
+    if (start < 0 || end < 0 || start > ordered.length || end > ordered.length || start >= end) {
+      throw new ClaudeCodeCaptureError(
+        `Invalid slice [${start}, ${end}) over ${ordered.length} tool calls.`,
+      );
+    }
+    return ordered.slice(start, end);
+  }
+
+  return ordered;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

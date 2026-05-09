@@ -1,91 +1,68 @@
 import { type JsonValue } from "../trace/schema.js";
 import { type NormalizedTrace } from "../trace/normalizer.js";
+import {
+  DEFAULT_REDACTION_RULES,
+  REDACTED_PLACEHOLDER,
+  compileExtraRules,
+  redactJsonWithCounts,
+  redactStringWithCounts,
+  type RedactionCounts,
+  type RedactionRule,
+} from "../redact/secrets.js";
 
-const SECRET_PATTERNS: Array<[RegExp, string]> = [
-  // PEM private key blocks first — they span multiple lines and we want
-  // the whole block redacted before any sub-pattern bites a piece.
-  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "<REDACTED>"],
-  // JSON Web Tokens: three base64url segments separated by dots.
-  [/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "<REDACTED>"],
-  // Bearer tokens in Authorization-header shape.
-  [/Bearer\s+[A-Za-z0-9._~+/=-]{20,}/g, "<REDACTED>"],
-  // Anthropic API keys — match before the generic sk- rule.
-  [/sk-ant-[A-Za-z0-9_-]{20,}/g, "<REDACTED>"],
-  // OpenAI API keys (incl. project-scoped).
-  [/sk-(?:proj-)?[A-Za-z0-9_-]{32,}/g, "<REDACTED>"],
-  // GitHub personal access / OAuth / server / refresh tokens.
-  [/gh[pousr]_[A-Za-z0-9]{20,}/g, "<REDACTED>"],
-  // AWS access key id.
-  [/AKIA[0-9A-Z]{16}/g, "<REDACTED>"],
-  // Slack tokens.
-  [/xox[baprs]-[A-Za-z0-9-]{10,}/g, "<REDACTED>"],
-];
-
-function redactSecretsInString(input: string): string {
-  let out = input;
-  for (const [pattern, replacement] of SECRET_PATTERNS) {
-    out = out.replace(pattern, replacement);
-  }
-  return out;
+export interface GenerateOptions {
+  testName?: string;
+  extraRedactPatterns?: string[];
+  note?: string;
 }
 
-function redactSecrets(value: JsonValue): JsonValue {
-  if (typeof value === "string") {
-    return redactSecretsInString(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map(redactSecrets);
-  }
-  if (value !== null && typeof value === "object") {
-    const result: { [key: string]: JsonValue } = {};
-    for (const [key, child] of Object.entries(value)) {
-      result[key] = redactSecrets(child);
-    }
-    return result;
-  }
-  return value;
+export interface GenerateResult {
+  source: string;
+  redactionCounts: RedactionCounts;
+  rulesApplied: RedactionRule[];
 }
 
-function redactTrace(trace: NormalizedTrace): NormalizedTrace {
-  return {
-    schemaVersion: trace.schemaVersion,
-    prompt: redactSecretsInString(trace.prompt),
-    toolCalls: trace.toolCalls.map((call) => ({
-      toolName: call.toolName,
-      arguments: redactSecrets(call.arguments),
-      result: redactSecrets(call.result),
-    })),
-    final: {
-      status: trace.final.status,
-      ...(trace.final.output_text
-        ? { output_text: redactSecretsInString(trace.final.output_text) }
-        : {}),
-    },
-  };
+export function generatePytestCase(
+  trace: NormalizedTrace,
+  options: string | GenerateOptions = {},
+): string {
+  return generatePytestCaseDetailed(trace, options).source;
 }
 
-export function generatePytestCase(trace: NormalizedTrace, testName?: string): string {
-  const safeTrace = redactTrace(trace);
-  const resolvedTestName = sanitizeTestName(testName ?? defaultTestName(safeTrace.prompt));
+export function generatePytestCaseDetailed(
+  trace: NormalizedTrace,
+  options: string | GenerateOptions = {},
+): GenerateResult {
+  const opts: GenerateOptions =
+    typeof options === "string" ? { testName: options } : options;
+
+  const extraRules = compileExtraRules(opts.extraRedactPatterns ?? []);
+  const rules: RedactionRule[] = [...extraRules, ...DEFAULT_REDACTION_RULES];
+
+  const { trace: safeTrace, counts } = redactTraceWithCounts(trace, rules);
+
+  const resolvedTestName = sanitizeTestName(opts.testName ?? defaultTestName(safeTrace.prompt));
   const toolSequence = safeTrace.toolCalls.map((event) => event.toolName);
   const renderedTrace = renderPython(safeTrace);
   const renderedToolSequence = indentMultiline(renderPython(toolSequence), 4);
+  const renderedExtras = renderExtraVolatilePatterns(extraRules);
+  const renderedNote = renderNote(opts.note);
 
-  return `from __future__ import annotations
+  const source = `from __future__ import annotations
 
 import re
 
 from skar_adapter import run_agent_under_test
 
 
-# Skar normalizes a few volatile substrings before comparing tool arguments
+${renderedNote}# Skar normalizes a few volatile substrings before comparing tool arguments
 # and output text, so a re-run of the agent does not fail this test for
 # unrelated reasons (different temp dir, fresh UUID, new timestamp), and
-# so any secret that slips into a real run is collapsed to <REDACTED>
-# before comparison instead of leaking into the test failure message.
+# any secret that slips into a real run is collapsed to <REDACTED> before
+# comparison instead of leaking into the test failure message.
 # Edit this list to add or remove patterns for your project.
 _VOLATILE_PATTERNS = [
-    # --- Common secret shapes (kept first so they win on overlap). ---
+${renderedExtras}    # --- Common secret shapes (kept first so they win on overlap). ---
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----"), "<REDACTED>"),
     (re.compile(r"eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"), "<REDACTED>"),
     (re.compile(r"Bearer\\s+[A-Za-z0-9._~+/=-]{20,}"), "<REDACTED>"),
@@ -150,6 +127,67 @@ def test_${resolvedTestName}():
     assert result["status"] == ${renderPython(safeTrace.final.status)}
 ${renderOutputAssertion(safeTrace)}
 `.trimEnd() + "\n";
+
+  return { source, redactionCounts: counts, rulesApplied: rules };
+}
+
+function redactTraceWithCounts(
+  trace: NormalizedTrace,
+  rules: RedactionRule[],
+): { trace: NormalizedTrace; counts: RedactionCounts } {
+  const counts: RedactionCounts = {};
+  const promptRedacted = redactStringWithCounts(trace.prompt, rules, counts);
+  const safeToolCalls = trace.toolCalls.map((call) => ({
+    toolName: call.toolName,
+    arguments: redactJsonInline(call.arguments, rules, counts),
+    result: redactJsonInline(call.result, rules, counts),
+  }));
+  const outputText = trace.final.output_text
+    ? redactStringWithCounts(trace.final.output_text, rules, counts)
+    : undefined;
+  return {
+    trace: {
+      schemaVersion: trace.schemaVersion,
+      prompt: promptRedacted,
+      toolCalls: safeToolCalls,
+      final: {
+        status: trace.final.status,
+        ...(outputText ? { output_text: outputText } : {}),
+      },
+    },
+    counts,
+  };
+}
+
+function redactJsonInline(
+  value: JsonValue,
+  rules: RedactionRule[],
+  counts: RedactionCounts,
+): JsonValue {
+  const { value: redacted, counts: nested } = redactJsonWithCounts(value, rules);
+  for (const [k, v] of Object.entries(nested)) {
+    counts[k] = (counts[k] ?? 0) + v;
+  }
+  return redacted;
+}
+
+function renderExtraVolatilePatterns(extras: RedactionRule[]): string {
+  if (extras.length === 0) return "";
+  const lines = extras.map(
+    (rule) =>
+      `    (re.compile(${pythonStringLiteral(rule.pythonPattern)}), ${pythonStringLiteral(REDACTED_PLACEHOLDER)}),`,
+  );
+  return `    # --- User-provided extra patterns (run first so they win on overlap). ---\n${lines.join("\n")}\n`;
+}
+
+function pythonStringLiteral(value: string): string {
+  return JSON.stringify(value);
+}
+
+function renderNote(note: string | undefined): string {
+  if (!note || note.trim().length === 0) return "";
+  const lines = note.replace(/\r\n/g, "\n").split("\n").map((line) => `# ${line}`.trimEnd());
+  return `# --- Note from author ---\n${lines.join("\n")}\n# --- End note ---\n\n\n`;
 }
 
 function renderOutputAssertion(trace: NormalizedTrace): string {

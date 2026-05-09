@@ -18,8 +18,8 @@ Use Skar when an AI agent produced a wrong, broken, or surprising tool-using run
 
 ## MCP tools (the agent-facing API)
 
-- `capture_claude_code_session`: read a Claude Code session log under ~/.claude/projects/ and emit a Skar trace JSON. Auto-discovers the latest session for the cwd; supports last_n_tool_calls slicing and explicit session_path. The natural first step when the user wants to lock a recent Claude Code run as a regression test.
-- `generate_pytest_regression`: convert a captured trace (file path or raw JSON) into ready-to-commit pytest source. Optional output_path writes the file. Pair with capture_claude_code_session for the one-shot flow, or call directly with trace_path/trace_json if the user already has a trace.
+- `capture_claude_code_session`: read a Claude Code session log under ~/.claude/projects/ and emit a Skar trace JSON. Auto-discovers the latest session for the cwd; supports last_n_tool_calls or precise from_tool_call_index/to_tool_call_index slicing. Default secret redaction is applied before the trace is returned or written. The natural first step when the user wants to lock a recent Claude Code run as a regression test.
+- `generate_pytest_regression`: convert a captured trace (file path or raw JSON) into ready-to-commit pytest source. Accepts extra_redact_patterns for project-specific token shapes, a free-text note rendered as a comment block at the top of the test, and report_path to emit a self-contained HTML summary alongside the test (captured slice, redaction counts, drift-tolerance summary, plain-English assertions). Pair with capture_claude_code_session for the one-shot flow.
 - `validate_trace`: precheck that a captured trace conforms to the Skar trace schema; returns field-level errors on failure.
 - `inspect_trace`: summarize a captured run (prompt, tool sequence, final status) plus the normalized JSON.
 

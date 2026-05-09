@@ -45,22 +45,21 @@ async function handleCapture(args: string[]): Promise<void> {
     const cwd = readOption(rest, "--cwd");
     const sessionPath = readOption(rest, "--session");
     const lastNRaw = readOption(rest, "--last-n");
+    const fromIndexRaw = readOption(rest, "--from-index");
+    const toIndexRaw = readOption(rest, "--to-index");
     const outPath = readOption(rest, "--out");
     const allowExternalPath = rest.includes("--allow-external-path");
 
-    let lastN: number | undefined;
-    if (lastNRaw !== undefined) {
-      const parsed = Number.parseInt(lastNRaw, 10);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new Error("--last-n must be a positive integer");
-      }
-      lastN = parsed;
-    }
+    const lastN = parsePositiveInt(lastNRaw, "--last-n");
+    const fromIndex = parseNonNegativeInt(fromIndexRaw, "--from-index");
+    const toIndex = parsePositiveInt(toIndexRaw, "--to-index");
 
     await runCaptureClaudeCode({
       ...(cwd !== undefined ? { cwd } : {}),
       ...(sessionPath !== undefined ? { sessionPath } : {}),
       ...(lastN !== undefined ? { lastN } : {}),
+      ...(fromIndex !== undefined ? { fromIndex } : {}),
+      ...(toIndex !== undefined ? { toIndex } : {}),
       ...(outPath !== undefined ? { outPath } : {}),
       ...(allowExternalPath ? { allowExternalPath: true } : {}),
     });
@@ -78,6 +77,39 @@ function readOption(args: string[], name: string): string | undefined {
     throw new Error(`Missing value for ${name}`);
   }
   return value;
+}
+
+function readAllOptions(args: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === name) {
+      const value = args[i + 1];
+      if (value === undefined) {
+        throw new Error(`Missing value for ${name}`);
+      }
+      values.push(value);
+      i += 1;
+    }
+  }
+  return values;
+}
+
+function parsePositiveInt(value: string | undefined, flag: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${flag} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function parseNonNegativeInt(value: string | undefined, flag: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${flag} must be a non-negative integer`);
+  }
+  return parsed;
 }
 
 async function handleTrace(args: string[]): Promise<void> {
@@ -101,27 +133,25 @@ async function handleTrace(args: string[]): Promise<void> {
 }
 
 async function handleGenerate(args: string[]): Promise<void> {
-  const fromTraceIndex = args.indexOf("--from-trace");
-  const outIndex = args.indexOf("--out");
-  const testNameIndex = args.indexOf("--test-name");
-
-  if (fromTraceIndex === -1 || outIndex === -1) {
-    throw new Error(
-      "Usage: skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>]",
-    );
-  }
-
-  const tracePath = args[fromTraceIndex + 1];
-  const outPath = args[outIndex + 1];
-  const testName = testNameIndex === -1 ? undefined : args[testNameIndex + 1];
+  const tracePath = readOption(args, "--from-trace");
+  const outPath = readOption(args, "--out");
+  const testName = readOption(args, "--test-name");
+  const note = readOption(args, "--note");
+  const reportPath = readOption(args, "--report");
+  const extraRedactPatterns = readAllOptions(args, "--redact-pattern");
 
   if (!tracePath || !outPath) {
     throw new Error(
-      "Usage: skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>]",
+      "Usage: skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>] [--note <text>] [--redact-pattern <regex>]... [--report <path>]",
     );
   }
 
-  await runGenerate(tracePath, outPath, testName ? { testName } : undefined);
+  await runGenerate(tracePath, outPath, {
+    ...(testName !== undefined ? { testName } : {}),
+    ...(note !== undefined ? { note } : {}),
+    ...(extraRedactPatterns.length > 0 ? { extraRedactPatterns } : {}),
+    ...(reportPath !== undefined ? { reportPath } : {}),
+  });
 }
 
 function helpText(): string {
@@ -130,8 +160,12 @@ function helpText(): string {
 Usage:
   skar trace validate <trace.json>
   skar trace inspect <trace.json>
-  skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>]
-  skar capture claude-code [--cwd <path>] [--session <path>] [--last-n <n>] [--out <path>] [--allow-external-path]
+  skar generate --from-trace <trace.json> --out <test.py>
+                [--test-name <name>] [--note <text>]
+                [--redact-pattern <regex>]... [--report <path>]
+  skar capture claude-code [--cwd <path>] [--session <path>]
+                           [--last-n <n> | --from-index <n> --to-index <n>]
+                           [--out <path>] [--allow-external-path]
 `;
 }
 

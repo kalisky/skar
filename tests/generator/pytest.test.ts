@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { generatePytestCase } from "../../src/generator/pytest.js";
+import {
+  generatePytestCase,
+  generatePytestCaseDetailed,
+} from "../../src/generator/pytest.js";
 import { normalizeTrace } from "../../src/trace/normalizer.js";
 import { parseTrace } from "../../src/trace/parser.js";
 
@@ -43,4 +46,68 @@ test("generatePytestCase redacts secret-shaped strings before rendering", () => 
   assert.equal(/BEGIN RSA PRIVATE KEY/.test(generated), false, "PEM block leaked");
   assert.equal(/eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0/.test(generated), false, "JWT leaked");
   assert.match(generated, /<REDACTED>/);
+});
+
+test("generatePytestCase honors extra_redact_patterns and emits them into _VOLATILE_PATTERNS", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "look up customer CUST-12345 then ID-9876" },
+    events: [
+      {
+        type: "tool_call" as const,
+        tool_name: "lookup",
+        arguments: { customer: "CUST-99999" },
+        result: { status: "ok" },
+      },
+    ],
+    final: { status: "success" },
+  };
+
+  const result = generatePytestCaseDetailed(normalizeTrace(parseTrace(trace)), {
+    extraRedactPatterns: ["CUST-\\d+"],
+    testName: "extras",
+  });
+
+  assert.equal(/CUST-12345/.test(result.source), false, "matched custom pattern leaked");
+  assert.equal(/CUST-99999/.test(result.source), false, "matched custom pattern leaked");
+  // The extra pattern should appear in the rendered _VOLATILE_PATTERNS list.
+  assert.match(result.source, /CUST-/);
+  assert.equal(result.redactionCounts["extra-0"], 2);
+});
+
+test("generatePytestCase renders the note as a comment block at the top", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "do the thing" },
+    events: [],
+    final: { status: "success" },
+  };
+
+  const generated = generatePytestCase(normalizeTrace(parseTrace(trace)), {
+    note: "This run was wrong because the agent skipped validation.\nLinked: ENG-1234",
+    testName: "with_note",
+  });
+
+  assert.match(generated, /Note from author/);
+  assert.match(generated, /# This run was wrong because the agent skipped validation\./);
+  assert.match(generated, /# Linked: ENG-1234/);
+});
+
+test("generatePytestCaseDetailed reports zero redaction counts on a clean trace", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "do the thing" },
+    events: [
+      {
+        type: "tool_call" as const,
+        tool_name: "noop",
+        arguments: { x: 1 },
+        result: null,
+      },
+    ],
+    final: { status: "success" },
+  };
+
+  const result = generatePytestCaseDetailed(normalizeTrace(parseTrace(trace)));
+  assert.deepEqual(result.redactionCounts, {});
 });

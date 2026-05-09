@@ -9,7 +9,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { captureClaudeCodeSession } from "../capture/claude_code.js";
-import { generatePytestCase } from "../generator/pytest.js";
+import { generatePytestCaseDetailed } from "../generator/pytest.js";
+import { renderHtmlReport } from "../report/html.js";
 import { normalizeTrace } from "../trace/normalizer.js";
 import { parseTrace, parseTraceFile, TraceParseError } from "../trace/parser.js";
 import { type Trace } from "../trace/schema.js";
@@ -69,7 +70,23 @@ export function createSkarServer(): McpServer {
           .positive()
           .optional()
           .describe(
-            "Slice the most recent N tool calls from the session. Useful for long sessions where only the tail is the bad run. If omitted, the full session is captured.",
+            "Slice the most recent N tool calls. Mutually exclusive with from_tool_call_index/to_tool_call_index. Useful when only the tail of a long session is the bad run.",
+          ),
+        from_tool_call_index: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe(
+            "0-based inclusive start index for slicing. Use together with to_tool_call_index for a precise range when you know exactly which tool calls are interesting. Mutually exclusive with last_n_tool_calls.",
+          ),
+        to_tool_call_index: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Exclusive end index for slicing. Defaults to the total tool-call count when only from_tool_call_index is provided. Mutually exclusive with last_n_tool_calls.",
           ),
         output_path: z
           .string()
@@ -85,15 +102,31 @@ export function createSkarServer(): McpServer {
           ),
       },
     },
-    async ({ cwd, session_path, last_n_tool_calls, output_path, allow_external_path }) => {
+    async ({
+      cwd,
+      session_path,
+      last_n_tool_calls,
+      from_tool_call_index,
+      to_tool_call_index,
+      output_path,
+      allow_external_path,
+    }) => {
       const result = await captureClaudeCodeSession({
         ...(cwd !== undefined ? { cwd } : {}),
         ...(session_path !== undefined ? { sessionPath: session_path } : {}),
         ...(last_n_tool_calls !== undefined ? { lastNToolCalls: last_n_tool_calls } : {}),
+        ...(from_tool_call_index !== undefined
+          ? { fromToolCallIndex: from_tool_call_index }
+          : {}),
+        ...(to_tool_call_index !== undefined ? { toToolCallIndex: to_tool_call_index } : {}),
         ...(allow_external_path !== undefined ? { allowExternalPath: allow_external_path } : {}),
       });
 
       const traceJson = JSON.stringify(result.trace, null, 2);
+      const totalRedactions = Object.values(result.redactionCounts).reduce(
+        (acc, n) => acc + n,
+        0,
+      );
 
       const messageLines = [
         `Captured ${result.toolCallCount} tool_call event(s) from ${result.sessionPath}` +
@@ -102,6 +135,12 @@ export function createSkarServer(): McpServer {
             : ""),
         "Note: final.status is set to \"unknown\" because session logs do not record an explicit success/failure signal. Edit the trace before generating the test if you have one.",
       ];
+
+      if (totalRedactions > 0) {
+        messageLines.push(
+          `Auto-redacted ${totalRedactions} secret-shaped value(s) (API keys, JWTs, Bearer tokens, PEM blocks). Counts by category: ${JSON.stringify(result.redactionCounts)}.`,
+        );
+      }
 
       if (output_path) {
         await mkdir(path.dirname(path.resolve(output_path)), { recursive: true });
@@ -148,18 +187,73 @@ export function createSkarServer(): McpServer {
           .describe(
             "Optional pytest test function suffix. The generator emits `def test_<test_name>():`. If omitted, a name is derived from the trace prompt.",
           ),
+        extra_redact_patterns: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Project-specific regex patterns to also redact (in addition to the built-in API-key / JWT / token shapes). Each matched substring is replaced with <REDACTED> in both the rendered TRACE block and the runtime _VOLATILE_PATTERNS list. Useful for internal token formats, customer ID shapes, or hostname patterns the defaults do not catch. Patterns must be valid JS regex syntax.",
+          ),
+        note: z
+          .string()
+          .optional()
+          .describe(
+            "Free-text note rendered as a comment block at the top of the generated test. Use this to record what was wrong about this run, why the test exists, or links to a ticket — context the future maintainer needs that isn't visible in the captured tool calls.",
+          ),
+        report_path: z
+          .string()
+          .optional()
+          .describe(
+            "Optional path to write a static HTML summary report alongside the test file. Renders captured slice, redaction counts, drift-tolerance summary, and plain-English assertions — useful for the engineer to glance at before committing the test (and shareable in PR descriptions). No server, no JS — just a single self-contained HTML file.",
+          ),
       },
     },
-    async ({ trace_path, trace_json, output_path, test_name }) => {
+    async ({
+      trace_path,
+      trace_json,
+      output_path,
+      test_name,
+      extra_redact_patterns,
+      note,
+      report_path,
+    }) => {
       const trace = await loadTrace({ trace_path, trace_json });
       const normalized = normalizeTrace(trace);
-      const generated = generatePytestCase(normalized, test_name);
+      const result = generatePytestCaseDetailed(normalized, {
+        ...(test_name !== undefined ? { testName: test_name } : {}),
+        ...(extra_redact_patterns !== undefined
+          ? { extraRedactPatterns: extra_redact_patterns }
+          : {}),
+        ...(note !== undefined ? { note } : {}),
+      });
+      const totalRedactions = Object.values(result.redactionCounts).reduce(
+        (acc, n) => acc + n,
+        0,
+      );
 
       const messageLines = ["Generated pytest regression test."];
       if (output_path) {
         await mkdir(path.dirname(path.resolve(output_path)), { recursive: true });
-        await writeFile(output_path, generated, "utf8");
+        await writeFile(output_path, result.source, "utf8");
         messageLines.push(`Wrote file: ${output_path}`);
+      }
+      if (totalRedactions > 0) {
+        messageLines.push(
+          `Redacted ${totalRedactions} value(s) before rendering. Counts by category: ${JSON.stringify(result.redactionCounts)}.`,
+        );
+      }
+      if (report_path) {
+        const html = renderHtmlReport({
+          trace: normalized,
+          ...(test_name !== undefined ? { testName: test_name } : {}),
+          ...(output_path !== undefined ? { testOutputPath: output_path } : {}),
+          ...(trace_path !== undefined ? { sourceTracePath: trace_path } : {}),
+          redactionCounts: result.redactionCounts,
+          rulesApplied: result.rulesApplied,
+          ...(note !== undefined ? { note } : {}),
+        });
+        await mkdir(path.dirname(path.resolve(report_path)), { recursive: true });
+        await writeFile(report_path, html, "utf8");
+        messageLines.push(`Wrote HTML report: ${report_path}`);
       }
       messageLines.push(
         "Next: ensure your project exposes `skar_adapter.run_agent_under_test(prompt, mocked_tool_calls)` returning {tool_calls, status, output_text?}, then run pytest.",
@@ -168,7 +262,7 @@ export function createSkarServer(): McpServer {
       return {
         content: [
           { type: "text", text: messageLines.join("\n") },
-          { type: "text", text: generated },
+          { type: "text", text: result.source },
         ],
       };
     },

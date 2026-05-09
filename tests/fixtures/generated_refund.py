@@ -8,8 +8,8 @@ from skar_adapter import run_agent_under_test
 # Skar normalizes a few volatile substrings before comparing tool arguments
 # and output text, so a re-run of the agent does not fail this test for
 # unrelated reasons (different temp dir, fresh UUID, new timestamp), and
-# so any secret that slips into a real run is collapsed to <REDACTED>
-# before comparison instead of leaking into the test failure message.
+# any secret that slips into a real run is collapsed to <REDACTED> before
+# comparison instead of leaking into the test failure message.
 # Edit this list to add or remove patterns for your project.
 _VOLATILE_PATTERNS = [
     # --- Common secret shapes (kept first so they win on overlap). ---

@@ -82,3 +82,39 @@ test("captureClaudeCodeSession refuses session_path outside ~/.claude/projects/"
       /allow_external_path/.test(error.message),
   );
 });
+
+test("captureClaudeCodeSession honors fromToolCallIndex/toToolCallIndex", async () => {
+  const result = await captureClaudeCodeSession({
+    sessionPath: fixture,
+    fromToolCallIndex: 1,
+    toToolCallIndex: 2,
+    allowExternalPath: true,
+  });
+
+  assert.equal(result.toolCallCount, 1);
+  assert.equal(result.totalToolCalls, 2);
+  assert.equal(result.trace.events[0]?.tool_name, "refund_create");
+});
+
+test("captureClaudeCodeSession refuses last_n_tool_calls AND range together", async () => {
+  await assert.rejects(
+    () =>
+      captureClaudeCodeSession({
+        sessionPath: fixture,
+        lastNToolCalls: 1,
+        fromToolCallIndex: 0,
+        allowExternalPath: true,
+      }),
+    (error: unknown) =>
+      error instanceof ClaudeCodeCaptureError && /not both/.test(error.message),
+  );
+});
+
+test("captureClaudeCodeSession reports redaction counts", async () => {
+  const result = await captureClaudeCodeSession({
+    sessionPath: fixture,
+    allowExternalPath: true,
+  });
+  // The minimal fixture has no secrets, so counts should be empty.
+  assert.deepEqual(result.redactionCounts, {});
+});

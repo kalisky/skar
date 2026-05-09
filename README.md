@@ -88,14 +88,29 @@ The server speaks stdio JSON-RPC and exposes the three tools above.
 bun install
 bun run src/cli/index.ts trace validate tests/fixtures/trace_refund.json
 bun run src/cli/index.ts trace inspect tests/fixtures/trace_refund.json
-bun run src/cli/index.ts capture claude-code --last-n 10 --out /tmp/trace.json
+bun run src/cli/index.ts capture claude-code \
+  --last-n 10 \
+  --out /tmp/trace.json
 bun run src/cli/index.ts generate \
   --from-trace /tmp/trace.json \
   --out /tmp/test_regression.py \
-  --test-name regression
+  --test-name regression \
+  --note "agent missed validation step" \
+  --redact-pattern "CUST-\d+" \
+  --report /tmp/regression-report.html
 ```
 
 (npm/npx work fine too if you don't have Bun.)
+
+The `--report` HTML is a single self-contained file you can glance at
+before committing the test or attach to a PR — it surfaces the captured
+slice, redaction counts, drift-tolerance summary, and a plain-English
+description of what the test asserts. No server, no JS.
+
+For finer slicing than `--last-n`, use `--from-index` and `--to-index`
+to pick an exact 0-based range over the captured tool calls. Add as
+many `--redact-pattern <regex>` flags as you need to scrub project-
+specific token shapes.
 
 Generated tests expect a small adapter module:
 
