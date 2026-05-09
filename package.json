@@ -1,7 +1,6 @@
 {
   "name": "@kalisky/skar",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
   "description": "Skar turns a captured AI agent trace into a committed pytest regression test. MCP server + CLI. Use when a tool-using agent run fails and you want to lock the failure as an executable test.",
   "keywords": [
     "mcp",
@@ -25,16 +24,37 @@
     "cursor",
     "llm-testing"
   ],
+  "license": "MIT",
+  "author": "Ofer Kalisky",
+  "homepage": "https://github.com/kalisky/skar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kalisky/skar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kalisky/skar/issues"
+  },
   "type": "module",
   "bin": {
     "skar": "./dist/cli/index.js",
     "skar-mcp": "./dist/mcp/server.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "AGENTS.md",
+    "llms.txt",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
-    "mcp": "tsx src/mcp/server.ts"
+    "mcp": "tsx src/mcp/server.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=22.0.0"

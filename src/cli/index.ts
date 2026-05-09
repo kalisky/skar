@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -144,5 +146,9 @@ function isDirectExecution(): boolean {
     return false;
   }
 
-  return fileURLToPath(import.meta.url) === path.resolve(entryPath);
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entryPath);
+  } catch {
+    return fileURLToPath(import.meta.url) === path.resolve(entryPath);
+  }
 }

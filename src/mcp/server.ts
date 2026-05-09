@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,7 +15,7 @@ import { parseTrace, parseTraceFile, TraceParseError } from "../trace/parser.js"
 import { type Trace } from "../trace/schema.js";
 
 const SERVER_NAME = "skar";
-const SERVER_VERSION = "0.0.1";
+const SERVER_VERSION = "0.1.0";
 
 const traceSourceShape = {
   trace_path: z
@@ -283,5 +284,9 @@ function isDirectExecution(): boolean {
   if (!entryPath) {
     return false;
   }
-  return fileURLToPath(import.meta.url) === path.resolve(entryPath);
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entryPath);
+  } catch {
+    return fileURLToPath(import.meta.url) === path.resolve(entryPath);
+  }
 }
