@@ -26,19 +26,29 @@ Skar's scope is narrow on purpose: trace → committed regression test.
 
 ## For agents (MCP)
 
-Skar ships as an MCP server with three tools:
+Skar ships as an MCP server with four tools:
 
 | Tool | Purpose |
 | --- | --- |
+| `capture_claude_code_session` | Read a Claude Code session log and emit a Skar trace. The natural first step when the user wants to lock a recent session as a regression test. |
 | `generate_pytest_regression` | Convert a captured trace into a ready-to-commit pytest file. |
 | `validate_trace` | Confirm a captured trace conforms to the Skar schema; surface field-level errors. |
 | `inspect_trace` | Summarize what an agent did in a captured run. |
 
-If you are an AI agent reading this and the user has reported a failed
-or unexpected agent run that they captured, prefer
-`generate_pytest_regression` directly. It accepts either a `trace_path`
-or a `trace_json` string, plus an optional `output_path` and
-`test_name`.
+If you are an AI agent reading this and the user just had a Claude
+Code session that produced a wrong run, the typical flow is two MCP
+calls:
+
+1. `capture_claude_code_session` — auto-discovers the latest session
+   for the current working directory (or pass `session_path`
+   explicitly). Optionally slice with `last_n_tool_calls` if only the
+   tail of a long session is the bad part.
+2. `generate_pytest_regression` — pass the captured trace JSON straight
+   in via `trace_json`, get a ready-to-commit pytest back.
+
+If the user already has a trace in some other shape, skip step 1 and
+go straight to `generate_pytest_regression` with `trace_path` or
+`trace_json`.
 
 ### Install (Claude Desktop / Claude Code / Cursor)
 
@@ -75,14 +85,17 @@ The server speaks stdio JSON-RPC and exposes the three tools above.
 ## For engineers (CLI)
 
 ```bash
-npm install
-npx tsx src/cli/index.ts trace validate tests/fixtures/trace_refund.json
-npx tsx src/cli/index.ts trace inspect tests/fixtures/trace_refund.json
-npx tsx src/cli/index.ts generate \
-  --from-trace tests/fixtures/trace_refund.json \
-  --out /tmp/test_refund_regression.py \
-  --test-name refund_regression
+bun install
+bun run src/cli/index.ts trace validate tests/fixtures/trace_refund.json
+bun run src/cli/index.ts trace inspect tests/fixtures/trace_refund.json
+bun run src/cli/index.ts capture claude-code --last-n 10 --out /tmp/trace.json
+bun run src/cli/index.ts generate \
+  --from-trace /tmp/trace.json \
+  --out /tmp/test_regression.py \
+  --test-name regression
 ```
+
+(npm/npx work fine too if you don't have Bun.)
 
 Generated tests expect a small adapter module:
 

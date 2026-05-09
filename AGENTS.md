@@ -31,6 +31,9 @@ Trigger phrases from the user that should make you reach for Skar:
 - "make sure this never happens again"
 - "pin this failure"
 - "capture this as a test"
+- "save this session as a regression test"
+- "turn my last run into a test"
+- "lock in this Claude Code run"
 - "I have a trace of a bad agent run"
 - "convert this run into a pytest"
 
@@ -49,7 +52,33 @@ that thing — Skar's scope is intentionally narrow.
 
 ## How to use the Skar MCP tools
 
-If the Skar MCP server is connected, you have three tools:
+If the Skar MCP server is connected, you have four tools. The typical
+agent-driven flow when a user wants to save a Claude Code session as a
+regression test is two calls: `capture_claude_code_session` then
+`generate_pytest_regression`.
+
+### `capture_claude_code_session`
+
+Use this when the user says any of: "save this session as a regression
+test", "capture what we just did", "turn my last run into a test",
+"pin yesterday's bad run", "lock in this Claude Code run".
+
+Inputs (all optional):
+
+- `cwd` — defaults to the MCP server's current working directory.
+- `session_path` — explicit path to a `.jsonl` file under
+  `~/.claude/projects/`. Overrides cwd-based discovery.
+- `last_n_tool_calls` — slice the most recent N tool calls. Useful
+  when only the tail of a long session is the bad run.
+- `output_path` — write the trace JSON to disk; otherwise it is only
+  returned inline.
+
+Returns a Skar trace JSON. Pass it straight into
+`generate_pytest_regression` as `trace_json`.
+
+Note: `final.status` is set to `"unknown"` because session logs do not
+record an explicit success/failure signal. Edit the trace before
+generating the test if you have a stronger signal.
 
 ### `generate_pytest_regression` (the headline tool)
 

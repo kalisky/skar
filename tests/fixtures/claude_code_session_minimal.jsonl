@@ -1,0 +1,9 @@
+{"type":"permission-mode","permissionMode":"default","sessionId":"sess-min-1"}
+{"type":"user","message":{"role":"user","content":"Refund order 123 if eligible"},"sessionId":"sess-min-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Looking up the order."}]},"sessionId":"sess-min-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_a","name":"refund_lookup","input":{"order_id":"123"}}]},"sessionId":"sess-min-1"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a","content":{"eligible":true,"order_id":"123"}}]},"sessionId":"sess-min-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_b","name":"refund_create","input":{"order_id":"123"}}]},"sessionId":"sess-min-1"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_b","content":{"refund_id":"r_123","status":"success"}}]},"sessionId":"sess-min-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Refund created"}]},"sessionId":"sess-min-1"}
+{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_side","name":"should_be_ignored","input":{}}]},"sessionId":"sess-min-1"}

@@ -11,6 +11,7 @@ Thumbs.db
 # Skar runtime artifacts (when implementations land)
 .skar/
 *.jsonl
+!tests/fixtures/*.jsonl
 
 # Node (if/when TS substrate)
 node_modules/

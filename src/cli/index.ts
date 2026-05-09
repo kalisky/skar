@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { runCaptureClaudeCode } from "./capture.js";
 import { runGenerate } from "./generate.js";
 import { runTraceInspect } from "./trace_inspect.js";
 import { runTraceValidate } from "./trace_validate.js";
@@ -23,7 +24,56 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  if (command === "capture") {
+    await handleCapture(rest);
+    return;
+  }
+
   throw new Error(`Unknown command: ${command}`);
+}
+
+async function handleCapture(args: string[]): Promise<void> {
+  const [subcommand, ...rest] = args;
+
+  if (!subcommand) {
+    throw new Error("Usage: skar capture claude-code [--cwd <path>] [--session <path>] [--last-n <n>] [--out <path>]");
+  }
+
+  if (subcommand === "claude-code") {
+    const cwd = readOption(rest, "--cwd");
+    const sessionPath = readOption(rest, "--session");
+    const lastNRaw = readOption(rest, "--last-n");
+    const outPath = readOption(rest, "--out");
+
+    let lastN: number | undefined;
+    if (lastNRaw !== undefined) {
+      const parsed = Number.parseInt(lastNRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error("--last-n must be a positive integer");
+      }
+      lastN = parsed;
+    }
+
+    await runCaptureClaudeCode({
+      ...(cwd !== undefined ? { cwd } : {}),
+      ...(sessionPath !== undefined ? { sessionPath } : {}),
+      ...(lastN !== undefined ? { lastN } : {}),
+      ...(outPath !== undefined ? { outPath } : {}),
+    });
+    return;
+  }
+
+  throw new Error(`Unknown capture subcommand: ${subcommand}`);
+}
+
+function readOption(args: string[], name: string): string | undefined {
+  const idx = args.indexOf(name);
+  if (idx === -1) return undefined;
+  const value = args[idx + 1];
+  if (value === undefined) {
+    throw new Error(`Missing value for ${name}`);
+  }
+  return value;
 }
 
 async function handleTrace(args: string[]): Promise<void> {
@@ -77,6 +127,7 @@ Usage:
   skar trace validate <trace.json>
   skar trace inspect <trace.json>
   skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>]
+  skar capture claude-code [--cwd <path>] [--session <path>] [--last-n <n>] [--out <path>]
 `;
 }
 
