@@ -31,8 +31,15 @@ _VOLATILE_PATTERNS = [
     (re.compile(r"[A-Za-z]:\\\\Windows\\\\Temp", re.IGNORECASE), "<TEMP>"),
     (re.compile(r"[A-Za-z]:/Users/[^/]+/AppData/Local/Temp", re.IGNORECASE), "<TEMP>"),
     (re.compile(r"[A-Za-z]:/Windows/Temp", re.IGNORECASE), "<TEMP>"),
-    # ISO-8601 timestamps.
+    # User home directories — Windows variants first so forward-slash
+    # \"C:/Users/...\" is not partially eaten by the macOS \"/Users/...\" rule.
+    (re.compile(r"[A-Za-z]:/Users/[^/\\s\\\"']+"), "<HOME>"),
+    (re.compile(r"[A-Za-z]:\\\\Users\\\\[^\\\\]+"), "<HOME>"),
+    (re.compile(r"/Users/[^/\\s\\\"']+"), "<HOME>"),
+    (re.compile(r"/home/[^/\\s\\\"']+"), "<HOME>"),
+    # ISO-8601 timestamps and bare dates.
     (re.compile(r"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?"), "<TIMESTAMP>"),
+    (re.compile(r"\\d{4}-\\d{2}-\\d{2}(?!T\\d)"), "<DATE>"),
 ]
 
 
