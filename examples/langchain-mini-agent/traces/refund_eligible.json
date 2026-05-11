@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.1",
+  "input": {
+    "prompt": "Please refund order A-1234. The customer reported it never arrived."
+  },
+  "events": [
+    {
+      "type": "tool_call",
+      "tool_name": "lookup_order",
+      "arguments": {"order_id": "A-1234"},
+      "result": {
+        "order_id": "A-1234",
+        "total_cents": 4999,
+        "status": "delivered",
+        "refund_eligible": true
+      }
+    },
+    {
+      "type": "tool_call",
+      "tool_name": "process_refund",
+      "arguments": {
+        "order_id": "A-1234",
+        "reason": "Customer reported order never arrived"
+      },
+      "result": {
+        "order_id": "A-1234",
+        "refund_id": "ref_8f4a2c",
+        "amount_cents": 4999,
+        "status": "issued",
+        "reason": "Customer reported order never arrived"
+      }
+    }
+  ],
+  "final": {
+    "status": "success",
+    "output_text": "I've issued a refund of $49.99 for order A-1234. The customer should see it within 3-5 business days."
+  }
+}

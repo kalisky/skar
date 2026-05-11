@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Skar regression report — refund_eligible_order_lc</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { margin: 0 0 0.25rem; }
+  h2 { margin-top: 2rem; padding-bottom: 0.25rem; border-bottom: 1px solid #ddd; }
+  .meta { color: #666; font-size: 0.85em; margin-bottom: 2rem; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+  th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; vertical-align: top; }
+  th { font-weight: 600; color: #555; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code { background: rgba(127,127,127,0.12); padding: 0.05em 0.3em; border-radius: 3px; font-size: 0.95em; }
+  pre { background: rgba(127,127,127,0.08); padding: 0.75rem 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: 0.25rem 0; }
+  .pill { display: inline-block; background: rgba(127,127,127,0.15); padding: 0.1em 0.6em; border-radius: 999px; font-size: 0.85em; margin-right: 0.4em; }
+  .note pre { white-space: pre-wrap; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #e6e6e6; }
+    h2 { border-color: #333; }
+    th, td { border-color: #2a2a2a; }
+    .meta { color: #999; }
+  }
+</style>
+</head>
+<body>
+<h1>Skar regression report</h1>
+<p class="meta">
+  Generated 2026-05-11T14:33:51.426Z ·
+  Test <code>refund_eligible_order_lc</code> · Output <code>examples/langchain-mini-agent/tests/test_refund_eligible.py</code> · Trace <code>examples/langchain-mini-agent/traces/refund_eligible.json</code>
+</p>
+
+<section class="note"><h2>Author's note</h2><pre>Same refund flow as the Anthropic-SDK example, but tests a LangChain create_agent graph. The adapter runs the real LangChain agent under a scripted fake LLM, with captured tool calls recorded via SkarCaptureCallback.</pre></section>
+
+<section>
+  <h2>Captured slice</h2>
+  <p><span class="pill">2 captured</span></p>
+  <p>The agent began with this prompt:</p>
+  <pre>Please refund order A-1234. The customer reported it never arrived.</pre>
+  <table>
+    <thead><tr><th class="num">#</th><th>Tool</th><th>Argument summary</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td><code>lookup_order</code></td><td>order_id=A-1234</td></tr>
+      <tr><td class="num">2</td><td><code>process_refund</code></td><td>order_id=A-1234, reason=Customer reported order never arrived</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Redactions</h2>
+  <p>Skar did not detect any standard secret shapes in the captured trace. The default rules cover 8 categories of secrets — review the trace yourself for project-specific sensitive content (internal hostnames, customer names, account numbers).</p>
+</section>
+
+<section>
+  <h2>Drift tolerance</h2>
+  <p>The generated test will not fail when these volatile substrings differ between captured and observed runs:</p>
+  <ul>
+    <li>36-character UUIDs (session, request, run ids) — collapsed to &lt;UUID&gt;</li>
+    <li>Per-user temp directories on macOS (/var/folders/.../T), Linux (/tmp, /var/tmp), and Windows (AppData\Local\Temp, Windows\Temp) — collapsed to &lt;TEMP&gt;</li>
+    <li>User home directories on macOS (/Users/&lt;name&gt;), Linux (/home/&lt;name&gt;), Windows (C:\Users\&lt;name&gt;) — collapsed to &lt;HOME&gt;</li>
+    <li>ISO-8601 timestamps and bare YYYY-MM-DD dates — collapsed to &lt;TIMESTAMP&gt; / &lt;DATE&gt;</li>
+  </ul>
+  <p>Edit <code>_VOLATILE_PATTERNS</code> at the top of the generated test file to add or remove patterns for your project.</p>
+</section>
+
+<section>
+  <h2>What this test asserts</h2>
+  <ul>
+    <li>The agent calls these tools in this order, and only these: <code>lookup_order → process_refund</code>.</li>
+    <li>Each captured tool argument matches the observed argument (after drift and secret normalization).</li>
+    <li>The agent reports a final status of <code>success</code>.</li>
+    <li>The final <code>output_text</code> contains <code>I've issued a refund of $49.99 for order A-1234. The customer should see it wit…</code> (after drift normalization).</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What you need to wire</h2>
+  <p>The generated test imports <code>skar_adapter.run_agent_under_test</code>. Provide this in your project as a module that <em>mocks</em> your agent and replays captured tool calls — it should not actually invoke real tools, APIs, or shells.</p>
+  <pre># skar_adapter.py
+def run_agent_under_test(*, prompt, mocked_tool_calls):
+    # Return a dict: tool_calls (list), status (str), output_text (optional str).
+    ...</pre>
+</section>
+
+</body>
+</html>
