@@ -12,12 +12,10 @@ examples/anthropic-sdk-mini-agent/
                     # Takes claude_call + tool_executor as parameters so the
                     # production app and the regression test share the same code.
   tools.py          # Tool schemas (Anthropic format) + real implementations.
-  skar_capture.py   # SkarRecorder — wraps the tool executor during real runs
-                    # to capture every call+result and emit a Skar trace JSON.
-                    # Prototype for the future `skar` Python SDK.
   run.py            # Production entrypoint. Runs the real Anthropic API AND
-                    # writes a Skar trace to traces/ via SkarRecorder.
+                    # writes a Skar trace to traces/ via `skar.Recorder`.
                     # Requires ANTHROPIC_API_KEY.
+  requirements.txt  # anthropic, skar, pytest.
   traces/
     refund_eligible.json   # A captured Skar trace of a happy-path refund flow.
   tests/
@@ -27,12 +25,16 @@ examples/anthropic-sdk-mini-agent/
     test_refund_eligible.report.html  # The HTML summary for code review.
 ```
 
+The recorder logic itself (`skar.Recorder`) lives in the
+[`skar` Python package](../../python/) — installable via `pip install skar`.
+This example imports from there.
+
 ## Run the test
 
 From this directory:
 
 ```bash
-pip install pytest                   # only need anthropic if running run.py
+pip install -r requirements.txt
 PYTHONPATH=. pytest tests/
 ```
 
@@ -81,10 +83,10 @@ substitutes.
 
 ## How traces get produced (the capture-as-you-run flow)
 
-`run.py` uses `SkarRecorder` (from `skar_capture.py`) to wrap the tool
-executor during a real run. Every tool call flows through the recorder
-transparently, and at the end of the run a Skar trace JSON is written
-to `traces/<prompt-slug>.json`. The agent code doesn't know it's being
+`run.py` uses `skar.Recorder` to wrap the tool executor during a real
+run. Every tool call flows through the recorder transparently, and at
+the end of the run a Skar trace JSON is written to
+`traces/<prompt-slug>.json`. The agent code doesn't know it's being
 recorded — instrumentation happens at the boundary.
 
 ```bash
@@ -99,16 +101,15 @@ in this example was hand-crafted to make the test reproducible without
 an API key; once you've run `run.py` once with a real key, you can
 replace it with a real captured trace.
 
-### Reusing `SkarRecorder` in your own agent
+### Reusing `skar.Recorder` in your own agent
 
-The recorder is a single class. If your agent already takes a
-`tool_executor` parameter (or anything you can wrap), you can capture
-without changing the agent code:
+If your agent already takes a `tool_executor` parameter (or anything
+you can wrap), capture without changing the agent code:
 
 ```python
-from skar_capture import SkarRecorder
+from skar import Recorder
 
-recorder = SkarRecorder()
+recorder = Recorder()
 result = my_agent.run(
     prompt=prompt,
     tool_executor=recorder.wrap(my_real_tool_executor),
@@ -121,10 +122,10 @@ recorder.write(
 )
 ```
 
-This is the prototype of what a future `skar` Python SDK will expose
-as `from skar import Recorder`. Copy `skar_capture.py` into your own
-project for now; the API will stabilize before the published package
-ships.
+For frameworks where there's no single tool executor to wrap (LangChain
+callbacks, inline dispatch), use `recorder.note_call(name, args, result)`
+from wherever the tool finishes. See the
+[`skar` package README](../../python/README.md) for the full API.
 
 ## Note about redaction
 

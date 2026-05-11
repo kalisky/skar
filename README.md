@@ -25,12 +25,23 @@ locally with one `pytest` command.
 
 ---
 
-## Two faces
+## Two halves, two packages
 
-Skar is a tiny, single-purpose tool with two faces: an **MCP server**
-that agents can call directly, and a **CLI** for engineers. Either way,
-the verb is the same: take a captured tool-using agent run and emit a
-`pytest` file you can commit.
+Skar ships in two complementary halves:
+
+| Package | Install | Purpose |
+| --- | --- | --- |
+| **`@kalisky/skar`** (npm) | `npm install -g @kalisky/skar` | The CLI + MCP server. Validates traces, inspects them, generates pytest regression tests with an HTML summary report. Agent-facing. |
+| **`skar`** (PyPI) | `pip install skar` | The Python runtime — a `Recorder` class you wire into your agent code to capture runs and emit Skar trace JSON. Engineer-facing. |
+
+The typical workflow uses both: instrument your agent with `skar.Recorder`,
+let it run, feed the resulting trace JSON into `skar generate` (via CLI
+or MCP), commit the test. They speak the same Skar trace schema
+(v0.1) — the trace JSON is the contract between them.
+
+The npm package's MCP server exposes four tools agents can call directly:
+`capture_claude_code_session`, `generate_pytest_regression`,
+`validate_trace`, `inspect_trace`.
 
 ---
 

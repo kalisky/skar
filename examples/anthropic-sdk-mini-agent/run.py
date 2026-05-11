@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from agent import MODEL, SYSTEM_PROMPT, TOOLS_SCHEMA, run_agent
-from skar_capture import SkarRecorder
+from skar import Recorder
 from tools import real_tool_executor
 
 
@@ -53,7 +53,7 @@ def main(prompt: str) -> dict[str, Any]:
             max_tokens=1024,
         )
 
-    recorder = SkarRecorder()
+    recorder = Recorder()
     result = run_agent(
         prompt=prompt,
         claude_call=claude_call,

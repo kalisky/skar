@@ -33,3 +33,9 @@ venv/
 # Logs
 *.log
 kalisky-skar-*.tgz
+
+# Python build artifacts
+python/dist/
+python/build/
+python/*.egg-info/
+python/.pytest_cache/
