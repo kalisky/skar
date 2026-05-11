@@ -23,22 +23,24 @@ Python 3.10+. No runtime dependencies — just the stdlib.
 ## Usage — wrap a tool executor
 
 If your agent dispatches all tool calls through a single callable
-(`tool_executor(name, args) -> result`), wrap it with the recorder:
+(`tool_executor(name, args) -> result`), wrap it with the recorder and
+use the recorder as a `with` context manager so it can observe whether
+the run raised:
 
 ```python
 from skar import Recorder
 
 recorder = Recorder()
 
-result = my_agent.run(
-    prompt=prompt,
-    tool_executor=recorder.wrap(my_real_tool_executor),
-)
+with recorder:
+    result = my_agent.run(
+        prompt=prompt,
+        tool_executor=recorder.wrap(my_real_tool_executor),
+    )
 
 recorder.write(
     "traces/my_run.json",
     prompt=prompt,
-    status="unknown",          # set to "success"/"failure" if you have a signal
     output_text=result.get("output_text"),
 )
 ```
@@ -46,6 +48,17 @@ recorder.write(
 The wrapper transparently calls your real executor, captures
 `(name, args, result)`, and returns the executor's value unchanged. No
 changes to agent code required.
+
+`status` is automatically inferred from what the recorder observed:
+
+- `"failure"` if an exception propagated out of the `with` block.
+- `"success"` if at least one tool call was captured and no exception.
+- `"no_tools_called"` otherwise.
+
+"success" means *"the agent code ran to completion without raising,"*
+**not** *"the agent's decision was semantically correct."* Skar has no
+way to know the latter. Override with an explicit `status="..."` when
+you have a stronger signal (a downstream check, user feedback, etc.).
 
 ## Usage — `note_call` for callback-style frameworks
 
@@ -119,11 +132,13 @@ record.
 ## API surface
 
 - `Recorder()` — construct one per agent run.
+- `with recorder:` — context manager; lets the recorder observe exceptions.
 - `recorder.wrap(executor)` — return a recording wrapper.
 - `recorder.note_call(name, arguments, result)` — record one call directly.
 - `recorder.events` — read-only list of captured event dicts (for assertions).
-- `recorder.to_dict(prompt=, status=, output_text=)` — materialize as Skar trace dict.
-- `recorder.write(path, prompt=, status=, output_text=)` — write to disk, return Path.
+- `recorder.inferred_status()` — `"failure"` / `"success"` / `"no_tools_called"`.
+- `recorder.to_dict(prompt=, status=None, output_text=None)` — materialize as trace dict. `status=None` uses `inferred_status()`.
+- `recorder.write(path, prompt=, status=None, output_text=None)` — write to disk, return Path. Same status default.
 - `len(recorder)` — number of events captured so far.
 
 ## License

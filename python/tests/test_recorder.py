@@ -80,9 +80,23 @@ def test_to_dict_includes_output_text_when_provided():
     assert trace["final"]["output_text"] == "done"
 
 
-def test_to_dict_default_status_is_unknown():
+def test_to_dict_default_status_with_no_events_is_no_tools_called():
     trace = Recorder().to_dict(prompt="p")
-    assert trace["final"]["status"] == "unknown"
+    assert trace["final"]["status"] == "no_tools_called"
+
+
+def test_to_dict_default_status_with_events_is_success():
+    r = Recorder()
+    r.note_call("lookup_order", {"order_id": "A-1"}, {"ok": True})
+    trace = r.to_dict(prompt="p")
+    assert trace["final"]["status"] == "success"
+
+
+def test_to_dict_explicit_status_overrides_inference():
+    r = Recorder()
+    r.note_call("x", {}, {})
+    trace = r.to_dict(prompt="p", status="custom-status")
+    assert trace["final"]["status"] == "custom-status"
 
 
 def test_to_dict_requires_prompt():
@@ -130,3 +144,58 @@ def test_len_counts_events():
     r.note_call("x", {}, {})
     r.note_call("y", {}, {})
     assert len(r) == 2
+
+
+# --- context manager + status inference -------------------------------------
+
+
+def test_inferred_status_no_events():
+    assert Recorder().inferred_status() == "no_tools_called"
+
+
+def test_inferred_status_with_events_is_success():
+    r = Recorder()
+    r.note_call("x", {}, {})
+    assert r.inferred_status() == "success"
+
+
+def test_inferred_status_after_exception_is_failure():
+    r = Recorder()
+    try:
+        with r:
+            r.note_call("x", {}, {})
+            raise RuntimeError("agent crashed")
+    except RuntimeError:
+        pass
+    assert r.inferred_status() == "failure"
+
+
+def test_context_manager_does_not_suppress_exceptions():
+    r = Recorder()
+    with pytest.raises(RuntimeError, match="agent crashed"):
+        with r:
+            raise RuntimeError("agent crashed")
+
+
+def test_context_manager_clean_exit_yields_success_when_events_present():
+    r = Recorder()
+    with r:
+        r.note_call("x", {}, {})
+    assert r.inferred_status() == "success"
+
+
+def test_context_manager_clean_exit_yields_no_tools_called_when_no_events():
+    r = Recorder()
+    with r:
+        pass
+    assert r.inferred_status() == "no_tools_called"
+
+
+def test_write_default_status_uses_inference(tmp_path):
+    r = Recorder()
+    r.note_call("x", {}, {})
+    out = tmp_path / "t.json"
+    r.write(out, prompt="p")
+    with out.open() as f:
+        loaded = json.load(f)
+    assert loaded["final"]["status"] == "success"

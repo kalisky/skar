@@ -50,17 +50,18 @@ def main(prompt: str) -> dict[str, Any]:
     agent = build_agent(model)
 
     recorder = Recorder()
-    result = agent.invoke(
-        {"messages": [HumanMessage(content=prompt)]},
-        config={"callbacks": [SkarCaptureCallback(recorder)]},
-    )
+    with recorder:
+        result = agent.invoke(
+            {"messages": [HumanMessage(content=prompt)]},
+            config={"callbacks": [SkarCaptureCallback(recorder)]},
+        )
 
     final_text = _final_text(result.get("messages", []))
+    # status defaults to recorder.inferred_status().
     trace_path = Path(__file__).parent / "traces" / f"{_slug(prompt)}.json"
     recorder.write(
         trace_path,
         prompt=prompt,
-        status="unknown",  # set explicitly before generating a test if known
         output_text=final_text or None,
     )
     print(f"Wrote Skar trace: {trace_path}", file=sys.stderr)

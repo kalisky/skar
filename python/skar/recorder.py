@@ -13,13 +13,27 @@ The recorder works two ways:
    order they're recorded.
 
 Both produce the same Skar trace shape (schema_version 0.1).
+
+The recorder is also a **context manager**. Using `with` lets it observe
+whether the wrapped block raised an exception, which the recorder uses to
+infer a `final.status` when one isn't passed explicitly:
+
+    with Recorder() as recorder:
+        result = my_agent.run(prompt=p, tool_executor=recorder.wrap(my_tools))
+    recorder.write("trace.json", prompt=p, output_text=result.get("output_text"))
+    # status defaults to recorder.inferred_status()
+
+"success" here means "the wrapped block ran to completion without raising,
+and at least one tool call was captured." It does NOT mean "the agent's
+decision was correct" — Skar has no way to know that. Override with an
+explicit `status=` argument when you have a stronger signal.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 
 SCHEMA_VERSION = "0.1"
@@ -38,6 +52,8 @@ class Recorder:
 
     def __init__(self) -> None:
         self._events: list[dict[str, Any]] = []
+        self._used_as_context: bool = False
+        self._caught_exception: Optional[BaseException] = None
 
     # ------------------------------------------------------------------ capture
 
@@ -77,6 +93,34 @@ class Recorder:
             }
         )
 
+    # ------------------------------------------------------ context manager API
+
+    def __enter__(self) -> "Recorder":
+        self._used_as_context = True
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        if exc_val is not None:
+            self._caught_exception = exc_val
+        return False  # never suppress — let the exception propagate
+
+    def inferred_status(self) -> str:
+        """Best-guess final.status when the caller doesn't supply one.
+
+        - "failure" if an exception propagated out of a `with` block.
+        - "success" if at least one tool call was captured and no exception.
+        - "no_tools_called" otherwise.
+
+        "success" means "the wrapped block ran to completion without raising,"
+        NOT "the agent's decision was semantically correct." Override with
+        an explicit `status=` when you have a stronger signal.
+        """
+        if self._caught_exception is not None:
+            return "failure"
+        if self._events:
+            return "success"
+        return "no_tools_called"
+
     # ------------------------------------------------------------------ inspect
 
     @property
@@ -93,17 +137,22 @@ class Recorder:
         self,
         *,
         prompt: str,
-        status: str = "unknown",
-        output_text: str | None = None,
+        status: Optional[str] = None,
+        output_text: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Materialize the captured run as a Skar trace dict."""
+        """Materialize the captured run as a Skar trace dict.
+
+        If `status` is None (the default), uses `inferred_status()`. Pass
+        an explicit string to override.
+        """
         if not prompt:
             raise SchemaError("prompt is required (non-empty string)")
+        resolved_status = status if status is not None else self.inferred_status()
         trace: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "input": {"prompt": prompt},
             "events": list(self._events),
-            "final": {"status": status},
+            "final": {"status": resolved_status},
         }
         if output_text:
             trace["final"]["output_text"] = output_text
@@ -114,8 +163,8 @@ class Recorder:
         path: str | Path,
         *,
         prompt: str,
-        status: str = "unknown",
-        output_text: str | None = None,
+        status: Optional[str] = None,
+        output_text: Optional[str] = None,
     ) -> Path:
         """Materialize the trace and write it to disk. Returns the path written."""
         out_path = Path(path)

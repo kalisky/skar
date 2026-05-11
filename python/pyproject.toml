@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skar"
-version = "0.1.0"
+version = "0.2.0"
 description = "Skar runtime for Python — capture tool-using agent runs and emit Skar trace JSON for regression testing."
 readme = "README.md"
 license = {text = "MIT"}

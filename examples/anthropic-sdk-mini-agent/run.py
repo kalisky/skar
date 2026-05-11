@@ -54,19 +54,20 @@ def main(prompt: str) -> dict[str, Any]:
         )
 
     recorder = Recorder()
-    result = run_agent(
-        prompt=prompt,
-        claude_call=claude_call,
-        tool_executor=recorder.wrap(real_tool_executor),
-    )
+    with recorder:
+        result = run_agent(
+            prompt=prompt,
+            claude_call=claude_call,
+            tool_executor=recorder.wrap(real_tool_executor),
+        )
 
+    # status defaults to recorder.inferred_status(): "success" if the run
+    # completed without raising and captured at least one tool call,
+    # "failure" if an exception propagated, "no_tools_called" otherwise.
     trace_path = Path(__file__).parent / "traces" / f"{_slug(prompt)}.json"
     recorder.write(
         trace_path,
         prompt=prompt,
-        # Real runs don't carry an explicit success/failure signal — leave as
-        # "unknown" and let the engineer set it before generating a test.
-        status="unknown",
         output_text=result.get("output_text"),
     )
     print(f"Wrote Skar trace: {trace_path}", file=sys.stderr)
