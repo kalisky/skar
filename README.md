@@ -2,9 +2,34 @@
 
 > Skar turns a captured AI agent trace into a committed pytest regression test.
 
-Skar is a tiny, single-purpose tool with two faces: an **MCP server** that
-agents can call directly, and a **CLI** for engineers. Either way, the
-verb is the same: take a captured tool-using agent run and emit a
+## Who Skar is for
+
+Skar is for teams **writing the code that wraps an LLM into a tool-using
+agent** — the orchestration loop that picks tools, constructs messages,
+parses tool_use blocks, handles errors, and decides when to stop. If you
+ship a custom agent (LangChain, LlamaIndex, Anthropic SDK direct, a Java
+service that calls Claude, an AutoGen flow, etc.) and you've ever wanted
+to lock a specific run as a regression test, this is for you.
+
+Skar is **not** for engineers using Claude Code or Cursor to write
+non-agent code. Those tools *are* the agent — you don't own their
+internals, so there's nothing for Skar to regression-test. Skar will
+happily capture and visualize those sessions (the HTML report works for
+any captured trace), but the headline "test catches behavior drift"
+value prop only lights up when you control the agent's code.
+
+For a worked end-to-end example, see
+[`examples/anthropic-sdk-mini-agent/`](examples/anthropic-sdk-mini-agent/) —
+a ~100-line custom agent with a real Skar test wired around it, runnable
+locally with one `pytest` command.
+
+---
+
+## Two faces
+
+Skar is a tiny, single-purpose tool with two faces: an **MCP server**
+that agents can call directly, and a **CLI** for engineers. Either way,
+the verb is the same: take a captured tool-using agent run and emit a
 `pytest` file you can commit.
 
 ---
@@ -13,14 +38,17 @@ verb is the same: take a captured tool-using agent run and emit a
 
 You should reach for Skar (or have your agent reach for it) when:
 
-- An AI agent produced a wrong, broken, or surprising tool-using run.
+- A custom agent you maintain produced a wrong, broken, or surprising
+  tool-using run.
 - You have the trace (or you can produce one).
 - You want that specific failure to never recur — locked as a test in
   your repo, runnable in CI.
 
 You should **not** use Skar for: live trace capture, observability
-dashboards, generic eval scoring, or non-tool-using LLM completions.
-Skar's scope is narrow on purpose: trace → committed regression test.
+dashboards, generic eval scoring, non-tool-using LLM completions, or
+testing the behavior of an agent you don't own (Claude Code, Cursor,
+etc.). Skar's scope is narrow on purpose: trace → committed regression
+test, for agents whose code you control.
 
 ---
 
@@ -132,41 +160,64 @@ to pick an exact 0-based range over the captured tool calls. Add as
 many `--redact-pattern <regex>` flags as you need to scrub project-
 specific token shapes.
 
-Generated tests expect a small adapter module:
+Generated tests expect a small adapter module — `skar_adapter.py` —
+that imports your real agent code and runs it with the LLM and tools
+*stubbed out* from the captured trace. The full pattern, with an
+actual Anthropic-SDK agent, is in
+[`examples/anthropic-sdk-mini-agent/`](examples/anthropic-sdk-mini-agent/).
+Sketch:
 
 ```python
 # skar_adapter.py
+from agent import run_agent  # your real agent loop
+
 def run_agent_under_test(*, prompt, mocked_tool_calls):
-    return {
-        "tool_calls": [
-            {"tool_name": "refund_lookup", "arguments": {"order_id": "123"}},
-            {"tool_name": "refund_create", "arguments": {"order_id": "123"}},
-        ],
-        "status": "success",
-        "output_text": "Refund created",
-    }
+    scripted_claude = build_scripted_claude(mocked_tool_calls)
+    scripted_tools = build_scripted_tool_executor(mocked_tool_calls)
+    return run_agent(
+        prompt=prompt,
+        claude_call=scripted_claude,
+        tool_executor=scripted_tools,
+    )
 ```
 
-The contract is intentionally small: `tool_calls`, `status`, optional
-`output_text`. **The adapter is meant to mock the agent and replay the
-captured tool calls, not to actually invoke your live agent.** A naive
-implementation that re-calls real tools or services would re-execute
-side-effects (Bash commands, DB writes, API calls) every time `pytest`
-runs. Treat regression tests as offline replays.
+The adapter must invoke your **real agent code** with **scripted**
+collaborators — not just replay the captured tool_calls verbatim. A
+verbatim-replay adapter passes trivially and tests nothing. The whole
+point is for your agent's parsing, loop control, and message
+construction to run against the captured scenario so a regression in
+that code surfaces as a test failure. The example shows exactly how to
+script Claude responses + tool results from a Skar trace.
 
 ---
 
-## What a generated test looks like
+## What a generated test catches (and what it doesn't)
 
-The generator emits a plain pytest file. Default assertions:
+**Catches:** loop-control bugs in your agent, message-construction
+regressions, tool-dispatch errors, final-text extraction bugs, plus
+silent argument drift in places the volatility patterns don't cover.
 
-- The captured tool sequence matches.
-- The captured tool arguments match.
-- The final outcome status matches.
-- If the trace had `output_text`, that string appears in the run's
-  `output_text`.
+**Doesn't catch (by design):**
 
-You can edit the file freely — it's just Python, no DSL, no magic.
+- **LLM behavior changes** — Claude is scripted in the test; we don't
+  call the real API. Model upgrades or prompt edits could redirect
+  production behavior without ringing this bell.
+- **Tool implementation regressions** — tool results are replayed from
+  the trace. The real `lookup_order` or `process_refund` could quietly
+  start returning the wrong shape and Skar's test wouldn't notice.
+  Those tools should have their own unit tests.
+- **System prompt regressions** — if your prompt changes the agent's
+  tool sequence in production, the scripted-Claude test won't see it.
+
+To catch live LLM / prompt / tool behavior, run a separate test that
+invokes the real Anthropic API against a fixed scenario. That test has
+different cost, flakiness, and CI implications. Skar's
+snapshot-of-decisions tests and your live-LLM tests are complementary,
+not substitutes.
+
+You can edit the generated file freely — it's just Python, no DSL,
+no magic. Adjust `_VOLATILE_PATTERNS` at the top to add or remove
+project-specific normalization rules.
 
 ---
 

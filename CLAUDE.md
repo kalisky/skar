@@ -93,6 +93,24 @@ but they are not the current product definition.
 - Avoid introducing a custom DSL unless there is no simpler path.
 - No comments unless the "why" is non-obvious.
 
+## Working style with the agent
+
+- **Be decisive, don't ask yes/no questions for routine choices.** When
+  there's a clear best option (style preference, file location, minor
+  naming, which of two reasonable approaches to take), just pick it and
+  proceed. Mention what you picked in passing. The user will redirect
+  if they disagree.
+- **Pause and ask only when:**
+  - The action is hard to reverse (publish, force-push, deletion).
+  - The choice has real strategic weight (audience pivot, scope change,
+    architecture direction).
+  - You're missing a fact only the user has (their API key shape, their
+    deployment target, their team's conventions).
+- **Default: execute, then summarize.** Tight end-of-turn summary
+  (what changed, what's next). No long lists of options for the user
+  to pick from. No "would you like me to..." when the next step is
+  obvious.
+
 ## Where To Start
 
 Read `docs/v0-plan.md` first, then inspect `src/` and `tests/` for the
