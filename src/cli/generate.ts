@@ -42,6 +42,7 @@ export async function runGenerate(
       rulesApplied: result.rulesApplied,
       ...(opts.note !== undefined ? { note: opts.note } : {}),
       ...(opts.matchMode !== undefined ? { matchMode: opts.matchMode } : {}),
+      ...(opts.ignoreFields !== undefined ? { ignoreFields: opts.ignoreFields } : {}),
     });
     await mkdir(path.dirname(path.resolve(options.reportPath)), { recursive: true });
     await writeFile(options.reportPath, html, "utf8");

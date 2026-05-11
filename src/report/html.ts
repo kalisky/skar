@@ -16,6 +16,7 @@ export interface ReportInput {
   totalToolCallsInSource?: number | undefined;
   note?: string | undefined;
   matchMode?: "strict" | "multiset" | undefined;
+  ignoreFields?: string[] | undefined;
 }
 
 const DRIFT_SUMMARY = [
@@ -152,6 +153,8 @@ ${DRIFT_SUMMARY.map((line) => `    <li>${escapeHtml(line)}</li>`).join("\n")}
   <p>Edit <code>_VOLATILE_PATTERNS</code> at the top of the generated test file to add or remove patterns for your project.</p>
 </section>
 
+${renderIgnoreFieldsSection(input.ignoreFields)}
+
 <section>
   <h2>What this test asserts</h2>
   <p>Match mode: <code>${escapeHtml(input.matchMode ?? "strict")}</code>${
@@ -182,6 +185,22 @@ def run_agent_under_test(*, prompt, mocked_tool_calls):
 
 </body>
 </html>
+`;
+}
+
+function renderIgnoreFieldsSection(paths: string[] | undefined): string {
+  if (!paths || paths.length === 0) return "";
+  const items = paths
+    .map((p) => `    <li><code>${escapeHtml(p)}</code></li>`)
+    .join("\n");
+  return `<section>
+  <h2>Ignored argument fields</h2>
+  <p>These argument paths are stripped from each tool call before comparison. A re-run can change their values freely without failing the test — but the rest of the tool's arguments stay strict-checked.</p>
+  <ul>
+${items}
+  </ul>
+  <p>Edit <code>_IGNORE_FIELDS</code> at the top of the generated test file to add or remove paths.</p>
+</section>
 `;
 }
 

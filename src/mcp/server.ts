@@ -267,6 +267,7 @@ export function createSkarServer(): McpServer {
           rulesApplied: result.rulesApplied,
           ...(note !== undefined ? { note } : {}),
           ...(match_mode !== undefined ? { matchMode: match_mode } : {}),
+          ...(ignore_fields !== undefined ? { ignoreFields: ignore_fields } : {}),
         });
         await mkdir(path.dirname(path.resolve(report_path)), { recursive: true });
         await writeFile(report_path, html, "utf8");

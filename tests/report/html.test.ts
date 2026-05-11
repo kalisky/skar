@@ -51,6 +51,39 @@ test("renderHtmlReport renders the no-redaction case gracefully", () => {
   assert.match(html, /No tool calls in the captured slice\./);
 });
 
+test("renderHtmlReport renders ignored fields section when set", () => {
+  const html = renderHtmlReport({
+    trace: {
+      schemaVersion: "0.1",
+      prompt: "x",
+      toolCalls: [],
+      final: { status: "unknown" },
+    },
+    redactionCounts: {},
+    rulesApplied: DEFAULT_REDACTION_RULES,
+    ignoreFields: ["Bash.cwd", "*.request_id"],
+  });
+
+  assert.match(html, /Ignored argument fields/);
+  assert.match(html, /<code>Bash\.cwd<\/code>/);
+  assert.match(html, /<code>\*\.request_id<\/code>/);
+});
+
+test("renderHtmlReport omits ignored-fields section when none set", () => {
+  const html = renderHtmlReport({
+    trace: {
+      schemaVersion: "0.1",
+      prompt: "x",
+      toolCalls: [],
+      final: { status: "unknown" },
+    },
+    redactionCounts: {},
+    rulesApplied: DEFAULT_REDACTION_RULES,
+  });
+
+  assert.equal(/Ignored argument fields/.test(html), false);
+});
+
 test("renderHtmlReport HTML-escapes user-controlled content", () => {
   const html = renderHtmlReport({
     trace: {
