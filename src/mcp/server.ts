@@ -205,6 +205,12 @@ export function createSkarServer(): McpServer {
           .describe(
             "Optional path to write a static HTML summary report alongside the test file. Renders captured slice, redaction counts, drift-tolerance summary, and plain-English assertions — useful for the engineer to glance at before committing the test (and shareable in PR descriptions). No server, no JS — just a single self-contained HTML file.",
           ),
+        match_mode: z
+          .enum(["strict", "multiset"])
+          .optional()
+          .describe(
+            "How the generated test compares observed tool calls to the captured trace. 'strict' (default) asserts the exact captured sequence and arguments — best when the agent's behavior is deterministic enough to repeat. 'multiset' asserts that the same (tool_name, normalized_args) pairs appear with the same frequency in any order — use when the agent legitimately calls tools in varying orders between runs. If the user reports a flaky strict test where the only difference is ordering between independent tool invocations, regenerate with match_mode=multiset.",
+          ),
       },
     },
     async ({
@@ -215,6 +221,7 @@ export function createSkarServer(): McpServer {
       extra_redact_patterns,
       note,
       report_path,
+      match_mode,
     }) => {
       const trace = await loadTrace({ trace_path, trace_json });
       const normalized = normalizeTrace(trace);
@@ -224,6 +231,7 @@ export function createSkarServer(): McpServer {
           ? { extraRedactPatterns: extra_redact_patterns }
           : {}),
         ...(note !== undefined ? { note } : {}),
+        ...(match_mode !== undefined ? { matchMode: match_mode } : {}),
       });
       const totalRedactions = Object.values(result.redactionCounts).reduce(
         (acc, n) => acc + n,
@@ -250,6 +258,7 @@ export function createSkarServer(): McpServer {
           redactionCounts: result.redactionCounts,
           rulesApplied: result.rulesApplied,
           ...(note !== undefined ? { note } : {}),
+          ...(match_mode !== undefined ? { matchMode: match_mode } : {}),
         });
         await mkdir(path.dirname(path.resolve(report_path)), { recursive: true });
         await writeFile(report_path, html, "utf8");

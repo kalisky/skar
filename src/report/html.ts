@@ -15,6 +15,7 @@ export interface ReportInput {
   rulesApplied: RedactionRule[];
   totalToolCallsInSource?: number | undefined;
   note?: string | undefined;
+  matchMode?: "strict" | "multiset" | undefined;
 }
 
 const DRIFT_SUMMARY = [
@@ -153,8 +154,17 @@ ${DRIFT_SUMMARY.map((line) => `    <li>${escapeHtml(line)}</li>`).join("\n")}
 
 <section>
   <h2>What this test asserts</h2>
+  <p>Match mode: <code>${escapeHtml(input.matchMode ?? "strict")}</code>${
+    input.matchMode === "multiset"
+      ? ' — captured tool calls may appear in any order on rerun, but every (tool_name, arguments) pair must appear with the same frequency.'
+      : ' — captured tool calls must appear in the same order, with the same arguments.'
+  }</p>
   <ul>
-    <li>The agent calls these tools in this order, and only these: <code>${input.trace.toolCalls.map((c) => escapeHtml(c.toolName)).join(" → ") || "(none)"}</code>.</li>
+    ${
+      input.matchMode === "multiset"
+        ? `<li>The agent calls these tools (set, frequency-counted, any order): <code>${input.trace.toolCalls.map((c) => escapeHtml(c.toolName)).join(", ") || "(none)"}</code>.</li>`
+        : `<li>The agent calls these tools in this order, and only these: <code>${input.trace.toolCalls.map((c) => escapeHtml(c.toolName)).join(" → ") || "(none)"}</code>.</li>`
+    }
     <li>Each captured tool argument matches the observed argument (after drift and secret normalization).</li>
     <li>The agent reports a final status of <code>${escapeHtml(input.trace.final.status)}</code>.</li>
     ${finalAssertion}

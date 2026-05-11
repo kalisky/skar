@@ -105,6 +105,5 @@ def test_refund_order_123_if_eligible():
     observed_args = [_normalize(call["arguments"]) for call in result["tool_calls"]]
     expected_args = [_normalize(call["arguments"]) for call in TRACE["toolCalls"]]
     assert observed_args == expected_args
-
     assert result["status"] == "success"
     assert _normalize("Refund created") in _normalize(result.get("output_text", ""))

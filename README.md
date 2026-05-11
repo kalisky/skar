@@ -171,6 +171,12 @@ to pick an exact 0-based range over the captured tool calls. Add as
 many `--redact-pattern <regex>` flags as you need to scrub project-
 specific token shapes.
 
+If your agent legitimately reorders independent tool calls between
+runs and a strict test would be flaky, regenerate with
+`--match-mode multiset` (or pass `match_mode: "multiset"` to the MCP
+tool). The test still asserts that the same (tool_name, arguments)
+pairs occur with the same frequency — only ordering is loosened.
+
 Generated tests expect a small adapter module — `skar_adapter.py` —
 that imports your real agent code and runs it with the LLM and tools
 *stubbed out* from the captured trace. The full pattern, with an

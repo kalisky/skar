@@ -114,6 +114,14 @@ Use this for the main happy path. Inputs:
   alongside the test file. Useful before committing or attaching to a
   PR — surfaces captured slice, redaction counts, drift-tolerance
   summary, and plain-English assertions in one glanceable page.
+- `match_mode` (string, optional, `"strict"` or `"multiset"`, default
+  `"strict"`) — how the test asserts on the agent's tool sequence.
+  `strict` requires exact order; `multiset` accepts any ordering as
+  long as the same tool calls happen with the same frequencies. If a
+  user reports a strict test going red purely because the agent
+  reordered independent tool calls between runs, regenerate with
+  `match_mode="multiset"`. Don't loosen further than the user actually
+  needs.
 
 Returns: a short status message (including redaction counts) plus the
 generated pytest source.

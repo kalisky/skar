@@ -93,6 +93,49 @@ test("generatePytestCase renders the note as a comment block at the top", () => 
   assert.match(generated, /# Linked: ENG-1234/);
 });
 
+test("generatePytestCase defaults to strict match_mode (exact sequence assertion)", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "do" },
+    events: [
+      { type: "tool_call" as const, tool_name: "Bash", arguments: { command: "ls" }, result: "ok" },
+      { type: "tool_call" as const, tool_name: "Read", arguments: { path: "/x" }, result: "ok" },
+    ],
+    final: { status: "success" },
+  };
+
+  const generated = generatePytestCase(normalizeTrace(parseTrace(trace)));
+
+  // Strict mode emits an exact list equality on tool_name sequence.
+  assert.match(generated, /assert \[call\["tool_name"\] for call in result\["tool_calls"\]\] ==/);
+  // And does NOT pull in Counter/json (which are multiset-only imports).
+  assert.equal(/from collections import Counter/.test(generated), false);
+});
+
+test("generatePytestCase emits multiset assertions when match_mode='multiset'", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "do" },
+    events: [
+      { type: "tool_call" as const, tool_name: "Bash", arguments: { command: "ls" }, result: "ok" },
+      { type: "tool_call" as const, tool_name: "Read", arguments: { path: "/x" }, result: "ok" },
+    ],
+    final: { status: "success" },
+  };
+
+  const generated = generatePytestCase(normalizeTrace(parseTrace(trace)), {
+    matchMode: "multiset",
+  });
+
+  // Multiset mode imports Counter and json, uses _sig + Counter equality.
+  assert.match(generated, /from collections import Counter/);
+  assert.match(generated, /import json/);
+  assert.match(generated, /def _sig\(name, args\):/);
+  assert.match(generated, /Counter\(_sig\(c\["tool_name"\], c\["arguments"\]\) for c in result\["tool_calls"\]\)/);
+  // And does NOT emit the strict positional args list comparison.
+  assert.equal(/observed_args = \[_normalize/.test(generated), false);
+});
+
 test("generatePytestCaseDetailed reports zero redaction counts on a clean trace", () => {
   const trace = {
     schema_version: "0.1" as const,

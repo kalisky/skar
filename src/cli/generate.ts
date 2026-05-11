@@ -23,6 +23,7 @@ export async function runGenerate(
       ? { extraRedactPatterns: options.extraRedactPatterns }
       : {}),
     ...(options?.note !== undefined ? { note: options.note } : {}),
+    ...(options?.matchMode !== undefined ? { matchMode: options.matchMode } : {}),
   };
   const result = generatePytestCaseDetailed(normalized, opts);
 
@@ -39,6 +40,7 @@ export async function runGenerate(
       redactionCounts: result.redactionCounts,
       rulesApplied: result.rulesApplied,
       ...(opts.note !== undefined ? { note: opts.note } : {}),
+      ...(opts.matchMode !== undefined ? { matchMode: opts.matchMode } : {}),
     });
     await mkdir(path.dirname(path.resolve(options.reportPath)), { recursive: true });
     await writeFile(options.reportPath, html, "utf8");

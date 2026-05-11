@@ -10,10 +10,13 @@ import {
   type RedactionRule,
 } from "../redact/secrets.js";
 
+export type MatchMode = "strict" | "multiset";
+
 export interface GenerateOptions {
   testName?: string;
   extraRedactPatterns?: string[];
   note?: string;
+  matchMode?: MatchMode;
 }
 
 export interface GenerateResult {
@@ -42,16 +45,19 @@ export function generatePytestCaseDetailed(
   const { trace: safeTrace, counts } = redactTraceWithCounts(trace, rules);
 
   const resolvedTestName = sanitizeTestName(opts.testName ?? defaultTestName(safeTrace.prompt));
+  const matchMode: MatchMode = opts.matchMode ?? "strict";
   const toolSequence = safeTrace.toolCalls.map((event) => event.toolName);
   const renderedTrace = renderPython(safeTrace);
   const renderedToolSequence = indentMultiline(renderPython(toolSequence), 4);
   const renderedExtras = renderExtraVolatilePatterns(extraRules);
   const renderedNote = renderNote(opts.note);
+  const extraImports = matchMode === "multiset" ? "\nimport json\nfrom collections import Counter\n" : "";
+  const renderedAssertions = renderToolCallAssertions(matchMode, renderedToolSequence);
 
   const source = `from __future__ import annotations
 
 import re
-
+${extraImports}
 from skar_adapter import run_agent_under_test
 
 
@@ -118,12 +124,7 @@ def test_${resolvedTestName}():
         mocked_tool_calls=TRACE["toolCalls"],
     )
 
-    assert [call["tool_name"] for call in result["tool_calls"]] == ${renderedToolSequence}
-
-    observed_args = [_normalize(call["arguments"]) for call in result["tool_calls"]]
-    expected_args = [_normalize(call["arguments"]) for call in TRACE["toolCalls"]]
-    assert observed_args == expected_args
-
+${renderedAssertions}
     assert result["status"] == ${renderPython(safeTrace.final.status)}
 ${renderOutputAssertion(safeTrace)}
 `.trimEnd() + "\n";
@@ -169,6 +170,31 @@ function redactJsonInline(
     counts[k] = (counts[k] ?? 0) + v;
   }
   return redacted;
+}
+
+function renderToolCallAssertions(mode: MatchMode, renderedToolSequence: string): string {
+  if (mode === "multiset") {
+    return [
+      "    # match_mode=multiset — agent may produce the captured tool calls",
+      "    # in any order, but every (tool_name, normalized_args) pair must",
+      "    # appear with the same frequency. Tolerates reorderings between",
+      "    # independent tool invocations without ignoring extras or drops.",
+      "    def _sig(name, args):",
+      "        return (name, json.dumps(_normalize(args), sort_keys=True, default=str))",
+      "",
+      "    observed = Counter(_sig(c[\"tool_name\"], c[\"arguments\"]) for c in result[\"tool_calls\"])",
+      "    expected = Counter(_sig(c[\"toolName\"], c[\"arguments\"]) for c in TRACE[\"toolCalls\"])",
+      "    assert observed == expected",
+    ].join("\n");
+  }
+
+  return [
+    `    assert [call["tool_name"] for call in result["tool_calls"]] == ${renderedToolSequence}`,
+    "",
+    "    observed_args = [_normalize(call[\"arguments\"]) for call in result[\"tool_calls\"]]",
+    "    expected_args = [_normalize(call[\"arguments\"]) for call in TRACE[\"toolCalls\"]]",
+    "    assert observed_args == expected_args",
+  ].join("\n");
 }
 
 function renderExtraVolatilePatterns(extras: RedactionRule[]): string {

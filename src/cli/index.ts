@@ -139,17 +139,27 @@ async function handleGenerate(args: string[]): Promise<void> {
   const note = readOption(args, "--note");
   const reportPath = readOption(args, "--report");
   const extraRedactPatterns = readAllOptions(args, "--redact-pattern");
+  const matchModeRaw = readOption(args, "--match-mode");
 
   if (!tracePath || !outPath) {
     throw new Error(
-      "Usage: skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>] [--note <text>] [--redact-pattern <regex>]... [--report <path>]",
+      "Usage: skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>] [--note <text>] [--redact-pattern <regex>]... [--match-mode strict|multiset] [--report <path>]",
     );
+  }
+
+  let matchMode: "strict" | "multiset" | undefined;
+  if (matchModeRaw !== undefined) {
+    if (matchModeRaw !== "strict" && matchModeRaw !== "multiset") {
+      throw new Error(`--match-mode must be 'strict' or 'multiset' (got '${matchModeRaw}')`);
+    }
+    matchMode = matchModeRaw;
   }
 
   await runGenerate(tracePath, outPath, {
     ...(testName !== undefined ? { testName } : {}),
     ...(note !== undefined ? { note } : {}),
     ...(extraRedactPatterns.length > 0 ? { extraRedactPatterns } : {}),
+    ...(matchMode !== undefined ? { matchMode } : {}),
     ...(reportPath !== undefined ? { reportPath } : {}),
   });
 }
@@ -163,6 +173,7 @@ Usage:
   skar generate --from-trace <trace.json> --out <test.py>
                 [--test-name <name>] [--note <text>]
                 [--redact-pattern <regex>]... [--report <path>]
+                [--match-mode strict|multiset]
   skar capture claude-code [--cwd <path>] [--session <path>]
                            [--last-n <n> | --from-index <n> --to-index <n>]
                            [--out <path>] [--allow-external-path]
