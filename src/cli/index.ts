@@ -139,11 +139,12 @@ async function handleGenerate(args: string[]): Promise<void> {
   const note = readOption(args, "--note");
   const reportPath = readOption(args, "--report");
   const extraRedactPatterns = readAllOptions(args, "--redact-pattern");
+  const ignoreFields = readAllOptions(args, "--ignore-field");
   const matchModeRaw = readOption(args, "--match-mode");
 
   if (!tracePath || !outPath) {
     throw new Error(
-      "Usage: skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>] [--note <text>] [--redact-pattern <regex>]... [--match-mode strict|multiset] [--report <path>]",
+      "Usage: skar generate --from-trace <trace.json> --out <test.py> [--test-name <name>] [--note <text>] [--redact-pattern <regex>]... [--ignore-field <path>]... [--match-mode strict|multiset] [--report <path>]",
     );
   }
 
@@ -159,6 +160,7 @@ async function handleGenerate(args: string[]): Promise<void> {
     ...(testName !== undefined ? { testName } : {}),
     ...(note !== undefined ? { note } : {}),
     ...(extraRedactPatterns.length > 0 ? { extraRedactPatterns } : {}),
+    ...(ignoreFields.length > 0 ? { ignoreFields } : {}),
     ...(matchMode !== undefined ? { matchMode } : {}),
     ...(reportPath !== undefined ? { reportPath } : {}),
   });
@@ -172,8 +174,8 @@ Usage:
   skar trace inspect <trace.json>
   skar generate --from-trace <trace.json> --out <test.py>
                 [--test-name <name>] [--note <text>]
-                [--redact-pattern <regex>]... [--report <path>]
-                [--match-mode strict|multiset]
+                [--redact-pattern <regex>]... [--ignore-field <path>]...
+                [--match-mode strict|multiset] [--report <path>]
   skar capture claude-code [--cwd <path>] [--session <path>]
                            [--last-n <n> | --from-index <n> --to-index <n>]
                            [--out <path>] [--allow-external-path]

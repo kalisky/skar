@@ -17,6 +17,7 @@ export interface GenerateOptions {
   extraRedactPatterns?: string[];
   note?: string;
   matchMode?: MatchMode;
+  ignoreFields?: string[];
 }
 
 export interface GenerateResult {
@@ -46,12 +47,14 @@ export function generatePytestCaseDetailed(
 
   const resolvedTestName = sanitizeTestName(opts.testName ?? defaultTestName(safeTrace.prompt));
   const matchMode: MatchMode = opts.matchMode ?? "strict";
+  const ignoreFields = validateIgnoreFields(opts.ignoreFields ?? []);
   const toolSequence = safeTrace.toolCalls.map((event) => event.toolName);
   const renderedTrace = renderPython(safeTrace);
   const renderedToolSequence = indentMultiline(renderPython(toolSequence), 4);
   const renderedExtras = renderExtraVolatilePatterns(extraRules);
   const renderedNote = renderNote(opts.note);
   const extraImports = matchMode === "multiset" ? "\nimport json\nfrom collections import Counter\n" : "";
+  const renderedIgnoreFields = renderIgnoreFields(ignoreFields);
   const renderedAssertions = renderToolCallAssertions(matchMode, renderedToolSequence);
 
   const source = `from __future__ import annotations
@@ -115,7 +118,7 @@ def _normalize(value):
     return value
 
 
-TRACE = ${renderedTrace}
+${renderedIgnoreFields}TRACE = ${renderedTrace}
 
 
 def test_${resolvedTestName}():
@@ -172,6 +175,74 @@ function redactJsonInline(
   return redacted;
 }
 
+function validateIgnoreFields(paths: string[]): string[] {
+  const valid = /^[A-Za-z_*][A-Za-z0-9_*]*(\.[A-Za-z_*][A-Za-z0-9_*]*)*$/;
+  for (const p of paths) {
+    if (!valid.test(p)) {
+      throw new Error(
+        `ignore_fields[${paths.indexOf(p)}] is not a valid path: ${JSON.stringify(p)}. ` +
+          "Expected format: 'tool_name.field' or '*.field' (nested OK: 'tool.env.PATH').",
+      );
+    }
+  }
+  return [...paths];
+}
+
+function renderIgnoreFields(paths: string[]): string {
+  // Always emit the helpers so the generated test composes cleanly with
+  // _normalize whether or not the user passed any paths. Empty list means
+  // _strip_ignored is a no-op for every tool.
+  const renderedList = paths.length === 0
+    ? "[]"
+    : `[\n${paths.map((p) => `    ${JSON.stringify(p)},`).join("\n")}\n]`;
+  return [
+    `# Field paths to drop from a tool's arguments BEFORE _normalize runs.`,
+    `# Syntax: "tool_name.field" or "*.field" for any tool; nested OK ("tool.env.PATH").`,
+    `# Edit this list to add or remove per-tool ignore rules.`,
+    `_IGNORE_FIELDS = ${renderedList}`,
+    ``,
+    ``,
+    `def _strip_ignored(tool_name, args):`,
+    `    if not isinstance(args, dict):`,
+    `        return args`,
+    `    result = {key: _deep_copy_jsonable(value) for key, value in args.items()}`,
+    `    for path in _IGNORE_FIELDS:`,
+    `        head, *rest = path.split(".")`,
+    `        if head not in (tool_name, "*"):`,
+    `            continue`,
+    `        _pop_path(result, rest)`,
+    `    return result`,
+    ``,
+    ``,
+    `def _pop_path(obj, parts):`,
+    `    if not parts:`,
+    `        return`,
+    `    head, *rest = parts`,
+    `    if not rest:`,
+    `        if isinstance(obj, dict):`,
+    `            obj.pop(head, None)`,
+    `        return`,
+    `    nested = obj.get(head) if isinstance(obj, dict) else None`,
+    `    if isinstance(nested, dict):`,
+    `        _pop_path(nested, rest)`,
+    ``,
+    ``,
+    `def _deep_copy_jsonable(value):`,
+    `    if isinstance(value, dict):`,
+    `        return {k: _deep_copy_jsonable(v) for k, v in value.items()}`,
+    `    if isinstance(value, list):`,
+    `        return [_deep_copy_jsonable(v) for v in value]`,
+    `    return value`,
+    ``,
+    ``,
+    `def _prepare_args(tool_name, args):`,
+    `    return _normalize(_strip_ignored(tool_name, args))`,
+    ``,
+    ``,
+    ``,
+  ].join("\n");
+}
+
 function renderToolCallAssertions(mode: MatchMode, renderedToolSequence: string): string {
   if (mode === "multiset") {
     return [
@@ -180,7 +251,7 @@ function renderToolCallAssertions(mode: MatchMode, renderedToolSequence: string)
       "    # appear with the same frequency. Tolerates reorderings between",
       "    # independent tool invocations without ignoring extras or drops.",
       "    def _sig(name, args):",
-      "        return (name, json.dumps(_normalize(args), sort_keys=True, default=str))",
+      "        return (name, json.dumps(_prepare_args(name, args), sort_keys=True, default=str))",
       "",
       "    observed = Counter(_sig(c[\"tool_name\"], c[\"arguments\"]) for c in result[\"tool_calls\"])",
       "    expected = Counter(_sig(c[\"toolName\"], c[\"arguments\"]) for c in TRACE[\"toolCalls\"])",
@@ -191,8 +262,8 @@ function renderToolCallAssertions(mode: MatchMode, renderedToolSequence: string)
   return [
     `    assert [call["tool_name"] for call in result["tool_calls"]] == ${renderedToolSequence}`,
     "",
-    "    observed_args = [_normalize(call[\"arguments\"]) for call in result[\"tool_calls\"]]",
-    "    expected_args = [_normalize(call[\"arguments\"]) for call in TRACE[\"toolCalls\"]]",
+    "    observed_args = [_prepare_args(call[\"tool_name\"], call[\"arguments\"]) for call in result[\"tool_calls\"]]",
+    "    expected_args = [_prepare_args(call[\"toolName\"], call[\"arguments\"]) for call in TRACE[\"toolCalls\"]]",
     "    assert observed_args == expected_args",
   ].join("\n");
 }

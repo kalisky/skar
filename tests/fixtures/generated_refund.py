@@ -59,6 +59,49 @@ def _normalize(value):
     return value
 
 
+# Field paths to drop from a tool's arguments BEFORE _normalize runs.
+# Syntax: "tool_name.field" or "*.field" for any tool; nested OK ("tool.env.PATH").
+# Edit this list to add or remove per-tool ignore rules.
+_IGNORE_FIELDS = []
+
+
+def _strip_ignored(tool_name, args):
+    if not isinstance(args, dict):
+        return args
+    result = {key: _deep_copy_jsonable(value) for key, value in args.items()}
+    for path in _IGNORE_FIELDS:
+        head, *rest = path.split(".")
+        if head not in (tool_name, "*"):
+            continue
+        _pop_path(result, rest)
+    return result
+
+
+def _pop_path(obj, parts):
+    if not parts:
+        return
+    head, *rest = parts
+    if not rest:
+        if isinstance(obj, dict):
+            obj.pop(head, None)
+        return
+    nested = obj.get(head) if isinstance(obj, dict) else None
+    if isinstance(nested, dict):
+        _pop_path(nested, rest)
+
+
+def _deep_copy_jsonable(value):
+    if isinstance(value, dict):
+        return {k: _deep_copy_jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_deep_copy_jsonable(v) for v in value]
+    return value
+
+
+def _prepare_args(tool_name, args):
+    return _normalize(_strip_ignored(tool_name, args))
+
+
 TRACE = {
     "schemaVersion": "0.1",
     "prompt": "Refund order 123 if eligible",
@@ -102,8 +145,8 @@ def test_refund_order_123_if_eligible():
         "refund_create"
     ]
 
-    observed_args = [_normalize(call["arguments"]) for call in result["tool_calls"]]
-    expected_args = [_normalize(call["arguments"]) for call in TRACE["toolCalls"]]
+    observed_args = [_prepare_args(call["tool_name"], call["arguments"]) for call in result["tool_calls"]]
+    expected_args = [_prepare_args(call["toolName"], call["arguments"]) for call in TRACE["toolCalls"]]
     assert observed_args == expected_args
     assert result["status"] == "success"
     assert _normalize("Refund created") in _normalize(result.get("output_text", ""))

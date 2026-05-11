@@ -122,6 +122,16 @@ Use this for the main happy path. Inputs:
   reordered independent tool calls between runs, regenerate with
   `match_mode="multiset"`. Don't loosen further than the user actually
   needs.
+- `ignore_fields` (string[], optional) — JSONPath-style paths to drop
+  from tool arguments before comparison. Syntax: `"tool_name.field"`
+  for one tool's field, `"*.field"` for that field on any tool, nested
+  allowed (`"tool.env.PATH"`). Use this when a tool legitimately
+  carries a per-run field (request_id, cwd prefix, opaque session
+  token) that isn't covered by the default volatility patterns and
+  has no recognizable regex shape. The right reason to add an
+  ignore_field is "this field varies run-to-run but isn't what we're
+  testing." Don't ignore fields the user might want to assert on —
+  ask first if it's not obvious from context.
 
 Returns: a short status message (including redaction counts) plus the
 generated pytest source.

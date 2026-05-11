@@ -24,6 +24,7 @@ export async function runGenerate(
       : {}),
     ...(options?.note !== undefined ? { note: options.note } : {}),
     ...(options?.matchMode !== undefined ? { matchMode: options.matchMode } : {}),
+    ...(options?.ignoreFields !== undefined ? { ignoreFields: options.ignoreFields } : {}),
   };
   const result = generatePytestCaseDetailed(normalized, opts);
 

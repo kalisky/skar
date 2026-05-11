@@ -177,6 +177,14 @@ runs and a strict test would be flaky, regenerate with
 tool). The test still asserts that the same (tool_name, arguments)
 pairs occur with the same frequency — only ordering is loosened.
 
+For per-field drift that the regex patterns don't catch (request ids,
+session tokens, cwd prefixes), add `--ignore-field <path>` (repeatable;
+also `ignore_fields` on the MCP tool). Paths look like `Bash.cwd` to
+target one tool's field, `*.request_id` to target any tool, or
+`Tool.env.PATH` for nested. The named field is dropped from the
+argument dict before comparison; the rest of the argument stays
+strict-checked.
+
 Generated tests expect a small adapter module — `skar_adapter.py` —
 that imports your real agent code and runs it with the LLM and tools
 *stubbed out* from the captured trace. The full pattern, with an

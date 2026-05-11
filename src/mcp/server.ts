@@ -211,6 +211,12 @@ export function createSkarServer(): McpServer {
           .describe(
             "How the generated test compares observed tool calls to the captured trace. 'strict' (default) asserts the exact captured sequence and arguments — best when the agent's behavior is deterministic enough to repeat. 'multiset' asserts that the same (tool_name, normalized_args) pairs appear with the same frequency in any order — use when the agent legitimately calls tools in varying orders between runs. If the user reports a flaky strict test where the only difference is ordering between independent tool invocations, regenerate with match_mode=multiset.",
           ),
+        ignore_fields: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Per-tool argument field paths to drop before comparison — useful when a tool carries a field that drifts run-to-run but isn't covered by the default volatility patterns (request ids, opaque tokens, cwd prefixes, etc.). Syntax: 'tool_name.field' targets one tool; '*.field' targets that field on any tool. Nested allowed ('Bash.env.PATH'). Applied to the argument dict before drift/secret normalization runs. Prefer this over extra_redact_patterns when the field's content has no recognizable shape but the field itself is identifiable.",
+          ),
       },
     },
     async ({
@@ -222,6 +228,7 @@ export function createSkarServer(): McpServer {
       note,
       report_path,
       match_mode,
+      ignore_fields,
     }) => {
       const trace = await loadTrace({ trace_path, trace_json });
       const normalized = normalizeTrace(trace);
@@ -232,6 +239,7 @@ export function createSkarServer(): McpServer {
           : {}),
         ...(note !== undefined ? { note } : {}),
         ...(match_mode !== undefined ? { matchMode: match_mode } : {}),
+        ...(ignore_fields !== undefined ? { ignoreFields: ignore_fields } : {}),
       });
       const totalRedactions = Object.values(result.redactionCounts).reduce(
         (acc, n) => acc + n,

@@ -136,6 +136,59 @@ test("generatePytestCase emits multiset assertions when match_mode='multiset'", 
   assert.equal(/observed_args = \[_normalize/.test(generated), false);
 });
 
+test("generatePytestCase emits _IGNORE_FIELDS and _prepare_args helpers", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "do" },
+    events: [
+      {
+        type: "tool_call" as const,
+        tool_name: "Bash",
+        arguments: { command: "ls", cwd: "/Users/alice" },
+        result: "ok",
+      },
+    ],
+    final: { status: "success" },
+  };
+
+  const generated = generatePytestCase(normalizeTrace(parseTrace(trace)), {
+    ignoreFields: ["Bash.cwd", "*.request_id"],
+  });
+
+  assert.match(generated, /_IGNORE_FIELDS = \[/);
+  assert.match(generated, /"Bash\.cwd"/);
+  assert.match(generated, /"\*\.request_id"/);
+  assert.match(generated, /def _strip_ignored\(tool_name, args\):/);
+  assert.match(generated, /def _prepare_args\(tool_name, args\):/);
+  // Assertions should go through _prepare_args.
+  assert.match(generated, /_prepare_args\(call\["tool_name"\], call\["arguments"\]\)/);
+});
+
+test("generatePytestCase emits empty _IGNORE_FIELDS when none provided", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "do" },
+    events: [],
+    final: { status: "success" },
+  };
+  const generated = generatePytestCase(normalizeTrace(parseTrace(trace)));
+  assert.match(generated, /_IGNORE_FIELDS = \[\]/);
+  assert.match(generated, /def _prepare_args/);
+});
+
+test("generatePytestCase rejects malformed ignore_fields paths", () => {
+  const trace = {
+    schema_version: "0.1" as const,
+    input: { prompt: "do" },
+    events: [],
+    final: { status: "success" },
+  };
+  assert.throws(
+    () => generatePytestCase(normalizeTrace(parseTrace(trace)), { ignoreFields: ["Bash.cwd with spaces"] }),
+    /not a valid path/,
+  );
+});
+
 test("generatePytestCaseDetailed reports zero redaction counts on a clean trace", () => {
   const trace = {
     schema_version: "0.1" as const,
