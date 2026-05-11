@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(aws s3 ls *)",
+      "Bash(bun run check)",
+      "Bash(bun test)",
+      "Bash(bun run src/cli/index.ts trace validate *)",
+      "Bash(bun run src/cli/index.ts trace inspect *)",
+      "mcp__plugin_linear_linear__get_issue",
+      "mcp__plugin_linear_linear__list_issue_labels",
+      "mcp__plugin_linear_linear__list_issue_statuses",
+      "mcp__ide__getDiagnostics"
+    ]
+  }
+}
