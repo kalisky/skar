@@ -39,3 +39,7 @@ python/dist/
 python/build/
 python/*.egg-info/
 python/.pytest_cache/
+
+# Claude Code per-project settings — keep machine-local, never commit
+.claude/settings.json
+.claude/settings.local.json
