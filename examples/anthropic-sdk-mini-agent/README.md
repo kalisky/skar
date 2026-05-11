@@ -12,7 +12,11 @@ examples/anthropic-sdk-mini-agent/
                     # Takes claude_call + tool_executor as parameters so the
                     # production app and the regression test share the same code.
   tools.py          # Tool schemas (Anthropic format) + real implementations.
-  run.py            # Production entrypoint. Calls the real Anthropic API.
+  skar_capture.py   # SkarRecorder — wraps the tool executor during real runs
+                    # to capture every call+result and emit a Skar trace JSON.
+                    # Prototype for the future `skar` Python SDK.
+  run.py            # Production entrypoint. Runs the real Anthropic API AND
+                    # writes a Skar trace to traces/ via SkarRecorder.
                     # Requires ANTHROPIC_API_KEY.
   traces/
     refund_eligible.json   # A captured Skar trace of a happy-path refund flow.
@@ -75,20 +79,52 @@ That has different cost, flakiness, and CI implications. Skar's snapshot-
 of-decisions tests and your live-LLM tests are complementary, not
 substitutes.
 
-## How the trace was generated
+## How traces get produced (the capture-as-you-run flow)
 
-`traces/refund_eligible.json` was crafted by hand for this example so it
-is reproducible without an API key. To generate a fresh trace by actually
-running the agent:
+`run.py` uses `SkarRecorder` (from `skar_capture.py`) to wrap the tool
+executor during a real run. Every tool call flows through the recorder
+transparently, and at the end of the run a Skar trace JSON is written
+to `traces/<prompt-slug>.json`. The agent code doesn't know it's being
+recorded — instrumentation happens at the boundary.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 python run.py "Please refund order A-1234. The customer reported it never arrived."
+# Wrote Skar trace: examples/anthropic-sdk-mini-agent/traces/please_refund_order_a_1234_the_customer_reported_it_never_arrived.json
 ```
 
-…and convert the resulting tool sequence into a Skar trace JSON of the
-shape in `traces/refund_eligible.json`. A future helper in Skar will
-automate this; today it is manual.
+That trace is ready to feed straight into `skar generate` to produce a
+new regression test. The trace at `traces/refund_eligible.json` shipped
+in this example was hand-crafted to make the test reproducible without
+an API key; once you've run `run.py` once with a real key, you can
+replace it with a real captured trace.
+
+### Reusing `SkarRecorder` in your own agent
+
+The recorder is a single class. If your agent already takes a
+`tool_executor` parameter (or anything you can wrap), you can capture
+without changing the agent code:
+
+```python
+from skar_capture import SkarRecorder
+
+recorder = SkarRecorder()
+result = my_agent.run(
+    prompt=prompt,
+    tool_executor=recorder.wrap(my_real_tool_executor),
+)
+recorder.write(
+    "traces/my_run.json",
+    prompt=prompt,
+    status="unknown",
+    output_text=result.get("output_text"),
+)
+```
+
+This is the prototype of what a future `skar` Python SDK will expose
+as `from skar import Recorder`. Copy `skar_capture.py` into your own
+project for now; the API will stabilize before the published package
+ships.
 
 ## Note about redaction
 

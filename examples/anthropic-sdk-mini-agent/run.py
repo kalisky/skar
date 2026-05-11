@@ -1,31 +1,41 @@
-"""Run the agent against the real Anthropic API.
+"""Run the agent against the real Anthropic API, capturing a Skar trace.
 
 Usage:
     ANTHROPIC_API_KEY=sk-ant-... python run.py "refund order A-1234"
 
-The output is the same dict shape as the Skar adapter contract:
-    { "tool_calls": [...], "status": ..., "output_text": ... }
+This runs the real agent (real Anthropic API + real tools) and writes a
+Skar trace JSON to `traces/<slug>.json`. Feed that trace into
+`skar generate` to produce a pytest regression test.
 
-You can also pipe this output to a Skar trace by hand, or use the
-companion `capture_to_skar_trace.py` helper.
+The trace is captured via SkarRecorder, which wraps the tool executor and
+records each call/result transparently — no separate "capture mode" in
+the agent code itself.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
+from pathlib import Path
 from typing import Any
 
 from agent import MODEL, SYSTEM_PROMPT, TOOLS_SCHEMA, run_agent
+from skar_capture import SkarRecorder
 from tools import real_tool_executor
+
+
+def _slug(text: str, max_len: int = 50) -> str:
+    s = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    return s[:max_len] or "run"
 
 
 def main(prompt: str) -> dict[str, Any]:
     try:
         from anthropic import Anthropic
     except ImportError:
-        print("This example requires the anthropic SDK. Install with: pip install anthropic", file=sys.stderr)
+        print("This example requires the anthropic SDK. Install: pip install anthropic", file=sys.stderr)
         sys.exit(2)
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -43,7 +53,24 @@ def main(prompt: str) -> dict[str, Any]:
             max_tokens=1024,
         )
 
-    return run_agent(prompt=prompt, claude_call=claude_call, tool_executor=real_tool_executor)
+    recorder = SkarRecorder()
+    result = run_agent(
+        prompt=prompt,
+        claude_call=claude_call,
+        tool_executor=recorder.wrap(real_tool_executor),
+    )
+
+    trace_path = Path(__file__).parent / "traces" / f"{_slug(prompt)}.json"
+    recorder.write(
+        trace_path,
+        prompt=prompt,
+        # Real runs don't carry an explicit success/failure signal — leave as
+        # "unknown" and let the engineer set it before generating a test.
+        status="unknown",
+        output_text=result.get("output_text"),
+    )
+    print(f"Wrote Skar trace: {trace_path}", file=sys.stderr)
+    return result
 
 
 if __name__ == "__main__":
