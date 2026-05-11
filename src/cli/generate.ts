@@ -34,7 +34,7 @@ export async function runGenerate(
 
   if (options?.reportPath) {
     const html = renderHtmlReport({
-      trace: normalized,
+      trace: result.redactedTrace,
       testName: opts.testName,
       testOutputPath: outPath,
       sourceTracePath: tracePath,

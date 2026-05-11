@@ -24,6 +24,7 @@ export interface GenerateResult {
   source: string;
   redactionCounts: RedactionCounts;
   rulesApplied: RedactionRule[];
+  redactedTrace: NormalizedTrace;
 }
 
 export function generatePytestCase(
@@ -132,7 +133,7 @@ ${renderedAssertions}
 ${renderOutputAssertion(safeTrace)}
 `.trimEnd() + "\n";
 
-  return { source, redactionCounts: counts, rulesApplied: rules };
+  return { source, redactionCounts: counts, rulesApplied: rules, redactedTrace: safeTrace };
 }
 
 function redactTraceWithCounts(

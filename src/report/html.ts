@@ -47,7 +47,8 @@ export function renderHtmlReport(input: ReportInput): string {
 
   const toolRows = input.trace.toolCalls.map((call, index) => {
     const argSummary = summarizeArguments(call.arguments);
-    return `      <tr><td class="num">${index + 1}</td><td><code>${escapeHtml(call.toolName)}</code></td><td>${escapeHtml(argSummary)}</td></tr>`;
+    const resultSummary = summarizeResult(call.result);
+    return `      <tr><td class="num">${index + 1}</td><td><code>${escapeHtml(call.toolName)}</code></td><td>${escapeHtml(argSummary)}</td><td>${escapeHtml(resultSummary)}</td></tr>`;
   });
 
   const slice = input.totalToolCallsInSource
@@ -120,7 +121,7 @@ ${noteBlock}
   ${
     toolRows.length > 0
       ? `<table>
-    <thead><tr><th class="num">#</th><th>Tool</th><th>Argument summary</th></tr></thead>
+    <thead><tr><th class="num">#</th><th>Tool</th><th>Argument summary</th><th>Result preview</th></tr></thead>
     <tbody>
 ${toolRows.join("\n")}
     </tbody>
@@ -219,6 +220,16 @@ function summarizeArguments(args: unknown): string {
     return entries.length > 3 ? `${compact}, …` : compact;
   }
   return String(args);
+}
+
+function summarizeResult(result: unknown): string {
+  if (result === null || result === undefined) return "—";
+  if (typeof result === "string") {
+    return truncate(result.replace(/\s+/g, " ").trim(), 120);
+  }
+  if (typeof result === "number" || typeof result === "boolean") return String(result);
+  // Object or array — render as one-line JSON, truncated.
+  return truncate(stringifyShort(result).replace(/\s+/g, " ").trim(), 120);
 }
 
 function stringifyShort(value: unknown): string {

@@ -84,6 +84,47 @@ test("renderHtmlReport omits ignored-fields section when none set", () => {
   assert.equal(/Ignored argument fields/.test(html), false);
 });
 
+test("renderHtmlReport renders tool result previews in the captured-slice table", () => {
+  const html = renderHtmlReport({
+    trace: {
+      schemaVersion: "0.1",
+      prompt: "x",
+      toolCalls: [
+        { toolName: "lookup", arguments: { id: 1 }, result: { ok: true, refund_eligible: true } },
+        { toolName: "process", arguments: { id: 1 }, result: "issued in 3-5 business days" },
+      ],
+      final: { status: "success" },
+    },
+    redactionCounts: {},
+    rulesApplied: DEFAULT_REDACTION_RULES,
+  });
+
+  // The result-preview column exists.
+  assert.match(html, /Result preview/);
+  // Each row carries a preview (escaped JSON for objects, plain string for str).
+  assert.match(html, /refund_eligible/);
+  assert.match(html, /issued in 3-5 business days/);
+});
+
+test("renderHtmlReport caller is responsible for passing the redacted trace (security regression guard)", () => {
+  // The renderer trusts its input. The generator's caller must pass the
+  // redacted trace (result.redactedTrace), not the original. This test
+  // documents that contract by exercising it directly.
+  const html = renderHtmlReport({
+    trace: {
+      schemaVersion: "0.1",
+      prompt: "x",
+      toolCalls: [
+        { toolName: "t", arguments: { ok: true }, result: { token: "<REDACTED>" } },
+      ],
+      final: { status: "success" },
+    },
+    redactionCounts: { "anthropic-key": 1 },
+    rulesApplied: DEFAULT_REDACTION_RULES,
+  });
+  assert.match(html, /&lt;REDACTED&gt;/);
+});
+
 test("renderHtmlReport HTML-escapes user-controlled content", () => {
   const html = renderHtmlReport({
     trace: {

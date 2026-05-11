@@ -259,7 +259,7 @@ export function createSkarServer(): McpServer {
       }
       if (report_path) {
         const html = renderHtmlReport({
-          trace: normalized,
+          trace: result.redactedTrace,
           ...(test_name !== undefined ? { testName: test_name } : {}),
           ...(output_path !== undefined ? { testOutputPath: output_path } : {}),
           ...(trace_path !== undefined ? { sourceTracePath: trace_path } : {}),
