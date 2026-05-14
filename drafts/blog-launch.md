@@ -1,31 +1,32 @@
 # Turning a bad agent run into a committed regression test
 
-A few months ago I started shipping a custom agent — a Python loop
-around the Anthropic Messages API that picks tools, dispatches them,
-parses results, and decides when to stop. Standard stuff. The kind
-of code anyone writing agent infrastructure ends up with.
+Imagine a tool-using agent — a Python loop around the Anthropic
+Messages API that picks tools, dispatches them, parses results,
+and decides when to stop. Standard stuff. The kind of code
+anyone writing agent infrastructure ends up with.
 
-It broke, of course. Not a stack trace — a *behavioral* break.
-Wrong tool, wrong order, plausible-looking final answer. I had the
-trace. I had a clear "this exact failure should never happen again"
-instinct. What I didn't have was a good way to turn that instinct
-into a test that lives next to the agent code and runs in CI.
+It produces a behavioral failure. Not a stack trace — wrong
+tool, wrong order, plausible-looking final answer. You have the
+trace. You have a clear "this exact failure should never happen
+again" instinct. What you don't have is a good way to turn that
+instinct into a test that lives next to the agent code and runs
+in CI.
 
-What was on offer:
+What's on offer in 2026:
 
-- **Observability tools** were great at letting me *look* at the
-  trace. They had no answer to "now lock it as a regression."
-- **Eval platforms** wanted me to upload my traces to their cloud,
-  define datasets, run jobs. Heavy, hosted, and aimed at "evaluate
-  the model" rather than "regression-test my code that wraps the
-  model."
-- **Hand-writing the test** was tractable but slow, and the parts
-  of the trace that mattered (tool sequence, tool arguments, final
-  outcome class) were tedious to type out from JSON into Python.
+- **Observability tools** are great at letting you *look* at the
+  trace. They have no answer to "now lock it as a regression."
+- **Eval platforms** want you to upload your traces to their
+  cloud, define datasets, run jobs. Heavy, hosted, and aimed at
+  "evaluate the model" rather than "regression-test the code
+  that wraps the model."
+- **Hand-writing the test** is tractable but slow, and the parts
+  of the trace that matter (tool sequence, tool arguments, final
+  outcome class) are tedious to type out from JSON into Python.
 
-I wanted: trace JSON in, readable pytest file out, committed to my
-repo, runnable locally, no SaaS in the loop. So I built that. It's
-called Skar.
+I wanted to close that gap: trace JSON in, readable pytest file
+out, committed to your repo, runnable locally, no SaaS in the
+loop. So I built it. It's called Skar.
 
 ## What it does, concretely
 
@@ -67,9 +68,12 @@ say, exit the tool-use loop one turn early — and the test fails
 with a readable diff:
 
 ```
-AssertionError: tool sequence mismatch
-  expected: ['lookup_order', 'process_refund']
-  observed: ['lookup_order']
+>   assert [call["tool_name"] for call in result["tool_calls"]] == [
+        "lookup_order",
+        "process_refund"
+    ]
+E   AssertionError: assert [] == ['lookup_orde...ocess_refund']
+E     Right contains 2 more items, first extra item: 'lookup_order'
 ```
 
 Restore the code, the test goes green.
@@ -132,9 +136,9 @@ addition:
 - A predicted (not yet observed) failure mode: real LLM agents
   reordering independent tool calls between runs. →
   `--match-mode multiset` for "same calls, any order."
-- The HTML summary report leaking redacted-shaped tokens because
-  it received the un-redacted trace. → Single point of
-  redaction, fed to every output.
+- The HTML summary report rendering secret-shaped tokens
+  verbatim because it received the un-redacted trace. → Single
+  point of redaction, fed to every output.
 
 The full evidence trail is in
 [`docs/dogfood-findings.md`](https://github.com/kalisky/skar/blob/main/docs/dogfood-findings.md).
@@ -183,7 +187,7 @@ For your own agent, two halves, two packages:
 ```bash
 # CLI + MCP server (npm)
 npm install -g @kalisky/skar
-claude mcp add skar -- skar-mcp
+claude mcp add skar -- skar-mcp        # Claude Code; see README for Claude Desktop / Cursor / .mcp.json
 
 # Python runtime — Recorder for capturing your custom agent (PyPI)
 pip install skar
