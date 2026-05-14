@@ -2,6 +2,10 @@
 
 > Skar turns a captured AI agent trace into a committed pytest regression test.
 
+**New:** [launch post](docs/launch-post.md) — what Skar does, what it
+catches, what it doesn't, and the dogfood evidence trail behind the
+design choices.
+
 ## Who Skar is for
 
 Skar is for teams **writing the code that wraps an LLM into a tool-using
